@@ -50,8 +50,10 @@ while raw.strip():
     module, offset = decoder.raw_decode(raw.lstrip())
     raw = raw.lstrip()[offset:]
     directory = module.get('Dir')
-    if not directory or module.get('Main'):
+    if module.get('Main'):
         continue
+    if not directory:
+        raise RuntimeError(f"Module {module['Path']} is not materialized; run go mod download all")
     for src in Path(directory).iterdir():
         if src.is_file() and src.name.lower().startswith(('license', 'copying', 'notice')):
             dest = notices / 'go' / module['Path'] / src.name
@@ -73,3 +75,8 @@ with archive_path.open('wb') as out, gzip.GzipFile(filename='', fileobj=out, mod
 digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
 Path('dist/fork/checksums.txt').write_text(f'{digest}  {archive_name}\n')
 Path('dist/fork/manifest.json').write_text((stage / 'manifest.json').read_text())
+
+# Keep per-file diagnostics outside the archive for repeat-build comparisons.
+files = {str(p.relative_to(stage)): hashlib.sha256(p.read_bytes()).hexdigest()
+         for p in sorted(stage.rglob('*')) if p.is_file()}
+Path('dist/fork/files.json').write_text(json.dumps(files, indent=2, sort_keys=True) + '\n')

@@ -18,6 +18,9 @@ if [ -n "$(git status --porcelain --untracked-files=all -- . ':!work')" ]; then
   version="$version-dirty"
 fi
 export CGO_ENABLED=0 GOTOOLCHAIN=local SST_SKIP_BRIDGE_IMAGE=true
+# License collection must not depend on which test-only modules happen to be
+# cached. Materialize the complete pinned graph before either archive build.
+go mod download all
 bun install --frozen-lockfile
 # A cd into platform still belongs to the root Bun workspace. Validate the
 # separate embedded lock outside that workspace, including its install patch.

@@ -51,14 +51,27 @@ jobs:
       - name: Rebuild and compare archive bytes
         run: |
           cp dist/fork/checksums.txt dist/first-checksums.txt
+          cp dist/fork/files.json dist/first-files.json
           ./scripts/fork-build
+          python3 - <<'PYTHON'
+          import json
+          first = json.load(open('dist/first-files.json'))
+          second = json.load(open('dist/fork/files.json'))
+          differences = [name for name in sorted(first.keys() | second.keys()) if first.get(name) != second.get(name)]
+          if differences:
+              raise SystemExit('Archive members changed: ' + ', '.join(differences))
+          PYTHON
           cmp dist/first-checksums.txt dist/fork/checksums.txt
       - name: Retain review artifacts (not a release)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sst-forum-${{ github.sha }}-${{ matrix.os }}
-          path: dist/fork/*
-          if-no-files-found: error
+          path: |
+            dist/fork/*
+            dist/first-checksums.txt
+            dist/first-files.json
+          if-no-files-found: warn
           retention-days: 30
       - name: Retain integration evidence
         if: always()
