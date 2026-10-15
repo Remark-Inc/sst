@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+python3 - <<'PY'
+from pathlib import Path
+import re
+workflows = '\n'.join(p.read_text() for p in Path('.github/workflows').glob('*.y*ml'))
+for pattern in (r'permissions:[\s\S]*?\bwrite\b', r'npm publish', r'cargo publish', r'pypi-publish', r'goreleaser-action', r'login-action', r'SST_GITHUB_TOKEN', r'AUR_KEY', r'DISCORD_WEBHOOK', r'--push'):
+    assert not re.search(pattern, workflows), f'Unsafe workflow pattern: {pattern}'
+release = Path('.goreleaser.yml').read_text()
+assert 'disable: true' in release
+for forbidden in ('aurs:', 'brews:', 'github.com/anomalyco', 'github.com/sst'):
+    assert forbidden not in release, forbidden
+for filename in ('scripts/release', 'scripts/snapshot'):
+    text = Path(filename).read_text()
+    assert 'exit 1' in text and 'git push' not in text
+assert 'npm publish' not in Path('sdk/js/scripts/release.ts').read_text()
+build = Path('platform/scripts/build').read_text()
+assert 'ghcr.io/anomalyco' not in build and '--push' not in build
+print('Fork publishing guards passed')
+PY
+if ./scripts/release; then echo 'release guard failed' >&2; exit 1; fi
+if ./scripts/snapshot; then echo 'snapshot guard failed' >&2; exit 1; fi
+if DOCKER_PUSH=true ./platform/scripts/build; then echo 'Docker push guard failed' >&2; exit 1; fi

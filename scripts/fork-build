@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Build locally. Never tags, publishes, uploads, or deploys.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source scripts/fork-toolchain.env
+allow_dirty=false
+if [ "${1:-}" = --allow-dirty ]; then allow_dirty=true; shift; fi
+if [ "$#" -ne 0 ]; then echo 'Usage: scripts/fork-build [--allow-dirty]' >&2; exit 1; fi
+for tool in go bun node python3; do command -v "$tool" >/dev/null || { echo "Missing $tool" >&2; exit 1; }; done
+[ "$(go env GOVERSION)" = "go$FORK_GO_VERSION" ] || { echo "Require Go $FORK_GO_VERSION" >&2; exit 1; }
+[ "$(bun --version)" = "$FORK_BUN_VERSION" ] || { echo "Require Bun $FORK_BUN_VERSION" >&2; exit 1; }
+[ "$(node --version)" = "v$FORK_NODE_VERSION" ] || { echo "Require Node $FORK_NODE_VERSION" >&2; exit 1; }
+commit=$(git rev-parse HEAD)
+version="$FORK_BASE_VERSION+forum.$commit"
+# Scratch evidence is excluded; all source inputs must be committed.
+if [ -n "$(git status --porcelain --untracked-files=all -- . ':!work')" ]; then
+  if [ "$allow_dirty" != true ]; then echo 'Commit tracked changes before building distributable artifacts.' >&2; exit 1; fi
+  version="$version-dirty"
+fi
+export CGO_ENABLED=0 GOTOOLCHAIN=local SST_SKIP_BRIDGE_IMAGE=true
+python3 scripts/fork-runtime-lock.py
+bun install --frozen-lockfile
+# A cd into platform still belongs to the root Bun workspace. Validate the
+# separate embedded lock outside that workspace, including its install patch.
+(
+  standalone=$(mktemp -d "${TMPDIR:-/tmp}/sst-forum-platform.XXXXXX")
+  trap 'rm -rf "$standalone"' EXIT
+  cp platform/package.json platform/bun.lockb "$standalone/"
+  mkdir "$standalone/scripts"
+  cp platform/scripts/patch-pulumi-tracing.cjs "$standalone/scripts/"
+  cd "$standalone"
+  bun install --frozen-lockfile
+  bun audit --json
+)
+# Remove ignored generated output so stale embedded files cannot survive rebuilds.
+rm -rf platform/dist
+./platform/scripts/build
+# Match the engine/platform identity to the exact source tree.
+stage=$(mktemp -d "${TMPDIR:-/tmp}/sst-forum-build.XXXXXX")
+trap 'rm -rf "$stage"' EXIT
+GOOS=${GOOS:-$(go env GOOS)} GOARCH=${GOARCH:-$(go env GOARCH)}
+export GOOS GOARCH
+case "$GOOS/$GOARCH" in linux/amd64|linux/arm64|darwin/amd64|darwin/arm64) ;; *) echo "Unsupported target $GOOS/$GOARCH" >&2; exit 1;; esac
+go build -trimpath -buildvcs=false -mod=readonly -ldflags="-buildid= -X main.version=$version" -o "$stage/sst" ./cmd/sst
+cp LICENSE "$stage/LICENSE"
+cp docs/fork-maintenance.md "$stage/FORK-MAINTENANCE.md"
+cp scripts/fork-install "$stage/install"
+# Keep dependency locks and metadata next to the actual executable.
+cp go.mod go.sum "$stage/"
+cp platform/package.json "$stage/platform-package.json"
+cp platform/bun.lockb "$stage/platform-bun.lockb"
+cp platform/runtime/package.json "$stage/runtime-package.json"
+cp platform/runtime/bun.lockb "$stage/runtime-bun.lockb"
+cp bun.lockb "$stage/root-bun.lockb"
+# This directory is one build's output, not an archive repository. Otherwise
+# wildcard uploads can include old binaries absent from the current checksums.
+rm -rf dist/fork
+mkdir -p dist/fork
+python3 scripts/fork-package.py "$stage" "$version" "$commit" "$GOOS" "$GOARCH"
+printf 'Built %s (%s/%s) in dist/fork\n' "$version" "$GOOS" "$GOARCH"

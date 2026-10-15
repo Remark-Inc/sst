@@ -13,8 +13,13 @@ import (
 )
 
 //go:generate ../scripts/build
-//go:embed dist/* src/* functions/* package.json tsconfig.json bun.lockb
+//go:embed dist/* src/* functions/* package.json tsconfig.json bun.lockb runtime/* scripts/patch-pulumi-tracing.cjs
 var files embed.FS
+
+// RuntimeLock is the reviewed lock for the generated deployment manifest.
+func RuntimeLock() ([]byte, error) {
+	return files.ReadFile("runtime/bun.lockb")
+}
 
 //go:embed templates/*
 var Templates embed.FS

@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	_ "embed"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,29 +15,97 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
-	"github.com/sst/sst/v3/pkg/id"
+	"github.com/sst/sst/v3/pkg/flag"
 	"github.com/sst/sst/v3/pkg/process"
-	"github.com/sst/sst/v3/pkg/task"
 )
 
-func NeedsPulumi() bool {
-	path := PulumiPath()
-	slog.Info("checking for pulumi", "path", path)
-	if _, err := os.Stat(path); err != nil {
-		return true
+// Pulumi checksums are reviewed with the coordinated SDK/engine update.
+//
+//go:embed pulumi-checksums.txt
+var pulumiChecksums string
+
+// PulumiEnv applies to every engine invocation, including version and stack init.
+// The engine resolves bundled language plugins next to its real executable when
+// ambient plugins are disabled (Pulumi workspace.getPluginInfoAndPath).
+func PulumiEnv(env []string) []string {
+	result := make([]string, 0, len(env)+3)
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if key == "PULUMI_HOME" || key == "PULUMI_IGNORE_AMBIENT_PLUGINS" || key == "PULUMI_SKIP_UPDATE_CHECK" {
+			continue
+		}
+		result = append(result, entry)
 	}
-	cmd := process.Command(path, "version")
-	output, err := cmd.Output()
+	return append(result, "PULUMI_HOME="+ConfigDir(), "PULUMI_IGNORE_AMBIENT_PLUGINS=true", "PULUMI_SKIP_UPDATE_CHECK=true")
+}
+
+// ValidatePulumi rejects incomplete or mixed installations, including overrides.
+// Resolve symlinks as the engine does, so its sibling host is the one validated.
+func ValidatePulumi(path string) error {
+	realPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return true
+		return fmt.Errorf("resolve Pulumi installation: %w", err)
 	}
-	version := strings.TrimSpace(string(output))
-	return version != PULUMI_VERSION
+	for _, check := range []struct {
+		path string
+		arg  string
+	}{
+		{realPath, "version"},
+		{filepath.Join(filepath.Dir(realPath), executableName("pulumi-language-nodejs")), "--version"},
+	} {
+		cmd := process.Command(check.path, check.arg)
+		cmd.Env = PulumiEnv(os.Environ())
+		output, err := cmd.Output()
+		if err != nil {
+			return fmt.Errorf("check %s: %w; install the complete Pulumi %s distribution", check.path, err, PULUMI_VERSION)
+		}
+		if strings.TrimPrefix(strings.TrimSpace(string(output)), "v") != strings.TrimPrefix(PULUMI_VERSION, "v") {
+			return fmt.Errorf("%s must be Pulumi %s (got %q)", check.path, PULUMI_VERSION, strings.TrimSpace(string(output)))
+		}
+	}
+	return nil
+}
+
+func NeedsPulumi() bool {
+	// Never replace an explicitly supplied distribution. Run validates it even if
+	// SST_SKIP_DEPENDENCY_CHECK is set.
+	return flag.SST_PULUMI_PATH == "" && ValidatePulumi(PulumiPath()) != nil
 }
 
 func InstallPulumi(ctx context.Context) error {
+	if flag.SST_PULUMI_PATH != "" {
+		return ValidatePulumi(PulumiPath())
+	}
 	slog.Info("pulumi install")
+	// Serialize upgrades/repairs across CLI processes. Do not remove a version
+	// another process has just installed and may already be executing.
+	target := filepath.Dir(PulumiPath())
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return err
+	}
+	lockPath := target + ".lock"
+	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	for {
+		err := os.Mkdir(lockPath, 0755)
+		if err == nil {
+			break
+		}
+		if !os.IsExist(err) {
+			return err
+		}
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("waiting for Pulumi install lock %s: %w (if no installer is running, remove the stale lock directory)", lockPath, waitCtx.Err())
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	defer os.Remove(lockPath)
+	if ValidatePulumi(PulumiPath()) == nil {
+		return nil
+	}
 	var osArch string
 
 	switch runtime.GOOS {
@@ -63,48 +133,90 @@ func InstallPulumi(ctx context.Context) error {
 		fileExtension = ".zip"
 	}
 
-	_, err := task.Run(ctx, func() (any, error) {
-		url := fmt.Sprintf("https://github.com/pulumi/pulumi/releases/download/%v/pulumi-%s-%s%s", PULUMI_VERSION, PULUMI_VERSION, osArch, fileExtension)
+	// Keep filesystem work synchronous: cancellation must not release the lock
+	// while extraction, validation or promotion is still running.
+	install := func() error {
+		filename := fmt.Sprintf("pulumi-%s-%s%s", PULUMI_VERSION, osArch, fileExtension)
+		checksum := ""
+		for _, line := range strings.Split(pulumiChecksums, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[1] == filename {
+				checksum = fields[0]
+			}
+		}
+		if checksum == "" {
+			return fmt.Errorf("missing reviewed checksum for %s", filename)
+		}
+		url := fmt.Sprintf("https://github.com/pulumi/pulumi/releases/download/%s/%s", PULUMI_VERSION, filename)
 		slog.Info("pulumi downloading", "url", url)
 
-		resp, err := http.Get(url)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
-			return nil, err
+			return err
+		}
+		resp, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to download pulumi: HTTP status %d", resp.StatusCode)
+			return fmt.Errorf("failed to download pulumi: HTTP status %d", resp.StatusCode)
 		}
 
-		tmp := filepath.Join(BinPath(), id.Ascending())
-		err = os.MkdirAll(tmp, 0755)
+		target := filepath.Dir(PulumiPath())
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		tmp, err := os.MkdirTemp(filepath.Dir(target), ".install-")
 		if err != nil {
-			return nil, err
+			return err
+		}
+		cleanupStaging := true
+		defer func() {
+			if cleanupStaging {
+				_ = os.RemoveAll(tmp)
+			}
+		}()
+		archive, err := os.CreateTemp(filepath.Dir(target), ".archive-")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(archive.Name())
+		defer archive.Close()
+		hash := sha256.New()
+		if _, err := io.Copy(io.MultiWriter(archive, hash), resp.Body); err != nil {
+			return err
+		}
+		if fmt.Sprintf("%x", hash.Sum(nil)) != checksum {
+			return fmt.Errorf("checksum mismatch for %s", filename)
+		}
+		if _, err := archive.Seek(0, 0); err != nil {
+			return err
 		}
 		switch fileExtension {
 		case ".tar.gz":
-			gzr, err := gzip.NewReader(resp.Body)
+			gzr, err := gzip.NewReader(archive)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			defer gzr.Close()
 			err = untar(gzr, tmp)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 		case ".zip":
 			// Read zip file
-			zipBytes, err := io.ReadAll(resp.Body)
+			zipBytes, err := io.ReadAll(archive)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			// Open zip archive
 			zipReader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			// Extract all files to tmp root
@@ -119,47 +231,100 @@ func InstallPulumi(ctx context.Context) error {
 
 				rc, err := file.Open()
 				if err != nil {
-					return nil, err
+					return err
 				}
 
 				outFile, err := os.Create(destPath)
 				if err != nil {
 					rc.Close()
-					return nil, err
+					return err
 				}
 
 				_, err = io.Copy(outFile, rc)
 				rc.Close()
 				outFile.Close()
 				if err != nil {
-					return nil, err
+					return err
 				}
 			}
 
 		default:
-			return nil, fmt.Errorf("unsupported file extension: %s", fileExtension)
+			return fmt.Errorf("unsupported file extension: %s", fileExtension)
 		}
 
-		entries, err := os.ReadDir(tmp)
-		if err != nil {
-			return nil, err
+		if err := ValidatePulumi(filepath.Join(tmp, executableName("pulumi"))); err != nil {
+			return err
 		}
-		for _, file := range entries {
-			err = os.Rename(filepath.Join(tmp, file.Name()), filepath.Join(BinPath(), file.Name()))
-			if err != nil {
-				return nil, err
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// A previous SDK uses a different directory, so upgrades cannot leave a new
+		// engine beside an old language host. Only replace an invalid same-version install.
+		if err := promotePulumiInstall(tmp, target, os.Rename); err != nil {
+			// Keep the validated replacement available even if rollback also fails.
+			cleanupStaging = false
+			return err
+		}
+		return nil
+	}
+	var installErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		installErr = install()
+		if installErr == nil {
+			return nil
+		}
+	}
+	return installErr
+}
+
+// The caller holds the per-version install lock. Keep the previous directory
+// until promotion succeeds, and restore it if promotion fails. rename is passed
+// explicitly so tests can exercise filesystem failures without global hooks.
+func promotePulumiInstall(staged, target string, rename func(string, string) error) error {
+	backup := staged + ".previous"
+	hadPrevious := false
+	if _, err := os.Lstat(target); err == nil {
+		if err := rename(target, backup); err != nil {
+			return fmt.Errorf("preserve previous Pulumi installation: %w; validated replacement retained at %s", err, staged)
+		}
+		hadPrevious = true
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect Pulumi installation: %w; validated replacement retained at %s", err, staged)
+	}
+	if err := rename(staged, target); err != nil {
+		if hadPrevious {
+			if rollbackErr := rename(backup, target); rollbackErr != nil {
+				return fmt.Errorf("promote Pulumi installation: %w; rollback failed: %v; previous installation retained at %s; validated replacement retained at %s", err, rollbackErr, backup, staged)
 			}
 		}
-		os.RemoveAll(tmp)
-		return nil, nil
-	})
-	return err
+		return fmt.Errorf("promote Pulumi installation: %w; validated replacement retained at %s", err, staged)
+	}
+	if hadPrevious {
+		if err := os.RemoveAll(backup); err != nil {
+			slog.Warn("Pulumi installed but previous directory could not be removed", "path", backup, "error", err)
+		}
+	}
+	return nil
+}
+
+func executableName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 func PulumiPath() string {
-	path := filepath.Join(BinPath(), "pulumi")
-	if runtime.GOOS == "windows" {
-		path += ".exe"
+	if flag.SST_PULUMI_PATH != "" {
+		// Commands run from Pulumi's temporary working directory, not the caller's.
+		absolute, err := filepath.Abs(flag.SST_PULUMI_PATH)
+		if err == nil {
+			return absolute
+		}
+		return flag.SST_PULUMI_PATH
 	}
-	return path
+	return filepath.Join(BinPath(), "pulumi-releases", PULUMI_VERSION, executableName("pulumi"))
 }

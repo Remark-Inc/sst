@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-set -e
-export DOCKER_PUSH=true
-./platform/scripts/build
-goreleaser build --clean --snapshot --skip validate
-cd sdk/js
-bun run release
+set -euo pipefail
+printf '%s\n' 'Upstream snapshot publishing is disabled. Use scripts/fork-build --allow-dirty for local review.' >&2
+exit 1

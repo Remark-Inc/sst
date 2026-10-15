@@ -38,3 +38,6 @@ examples/**/uv.lock
 examples/**/deno.lock
 examples/**/Cargo.lock
 examples/**/.env.*
+
+# Local fork validation evidence and toolchains
+/work/

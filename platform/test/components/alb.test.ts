@@ -1,5 +1,5 @@
 import { describe, beforeAll, it, expect } from "vitest";
-import "../../src/global.d.ts";
+import type {} from "../../src/global.d.ts";
 import * as pulumi from "@pulumi/pulumi";
 
 // @ts-ignore
@@ -61,9 +61,8 @@ describe("Alb", function () {
         listeners: [{ port: 80, protocol: "http" }],
       });
 
-      pulumi.all([alb.arn]).apply(([arn]) => {
-        expect(arn).toBeDefined();
-      });
+      const arn = await new Promise<string>((resolve) => alb.arn.apply(resolve));
+      expect(arn).toBeDefined();
     });
 
     it("exposes url without domain", async () => {
@@ -76,9 +75,8 @@ describe("Alb", function () {
         listeners: [{ port: 80, protocol: "http" }],
       });
 
-      pulumi.all([alb.url]).apply(([url]) => {
-        expect(url).toMatch(/^http:\/\//);
-      });
+      const url = await new Promise<string>((resolve) => alb.url.apply(resolve));
+      expect(url).toMatch(/^http:\/\//);
     });
 
     it("exposes security group ID", async () => {
@@ -91,9 +89,8 @@ describe("Alb", function () {
         listeners: [{ port: 80, protocol: "http" }],
       });
 
-      pulumi.all([alb.securityGroupId]).apply(([sgId]) => {
-        expect(sgId).toBeDefined();
-      });
+      const sgId = await new Promise<string>((resolve) => alb.securityGroupId.apply(resolve));
+      expect(sgId).toBeDefined();
     });
 
     it("exposes nodes with loadBalancer, securityGroup, listeners", async () => {
@@ -113,7 +110,7 @@ describe("Alb", function () {
   });
 
   describe("#getListener", () => {
-    it("throws for non-existent listener on non-ref ALB", async () => {
+    it("discovers a listener not declared on a non-ref ALB", async () => {
       const alb = new Alb("TestAlbMissing", {
         vpc: {
           id: "vpc-123",
@@ -123,12 +120,12 @@ describe("Alb", function () {
         listeners: [{ port: 80, protocol: "http" }],
       });
 
-      expect(() => alb.getListener("https", 443)).toThrow(
-        /Listener "HTTPS:443" not found/,
-      );
+      const listener = alb.getListener("https", 443);
+      const arn = await new Promise<string>((resolve) => listener.arn.apply(resolve));
+      expect(arn).toContain("aws:lb/listener:Listener");
     });
 
-    it("error message includes ALB name", async () => {
+    it("discovered listener resource name includes ALB name", async () => {
       const alb = new Alb("MyNamedAlb", {
         vpc: {
           id: "vpc-123",
@@ -138,7 +135,9 @@ describe("Alb", function () {
         listeners: [{ port: 80, protocol: "http" }],
       });
 
-      expect(() => alb.getListener("https", 443)).toThrow(/MyNamedAlb/);
+      const listener = alb.getListener("https", 443);
+      const urn = await new Promise<string>((resolve) => listener.urn.apply(resolve));
+      expect(urn).toContain("MyNamedAlbListenerHTTPS443");
     });
   });
 
@@ -149,9 +148,8 @@ describe("Alb", function () {
         "arn:aws:elasticloadbalancing:us-east-1:123456789:loadbalancer/app/my-alb/abc123",
       );
 
-      pulumi.all([alb.arn]).apply(([arn]) => {
-        expect(arn).toBeDefined();
-      });
+      const arn = await new Promise<string>((resolve) => alb.arn.apply(resolve));
+      expect(arn).toBeDefined();
     });
 
     it("lazy discovers listener via getListener on ref ALB", async () => {

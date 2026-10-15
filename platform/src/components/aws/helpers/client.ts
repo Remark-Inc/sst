@@ -1,4 +1,4 @@
-import { StandardRetryStrategy } from "@aws-sdk/middleware-retry";
+import { StandardRetryStrategy } from "@smithy/middleware-retry";
 export type {} from "@smithy/types";
 
 type ClientOptions = {

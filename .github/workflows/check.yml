@@ -1,70 +1,159 @@
-name: check
-
+name: fork-check
 on:
   pull_request:
-    branches:
-      - dev
-    types: [opened, synchronize, reopened]
-
+  workflow_dispatch:
 permissions:
   contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  check:
-    runs-on: ubuntu-latest
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+          go-version: '1.26.9'
+      - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+          bun-version: '1.3.6'
+      - uses: actions/setup-node@v4
         with:
-          go-version: ">=1.23.2"
-          cache: true
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Download Go modules
-        run: go mod download
-
-      - name: Check types
-        run: cd platform && bun tsc --noEmit
-
-      - name: Build platform
-        run: ./platform/scripts/build
-        env:
-          DOCKER_PUSH: false
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v4
+          node-version: '26.5.1'
+      - name: Check publishing guards
+        run: ./scripts/fork-check-safety
+      - name: Check installer upgrade and overwrite behavior
+        run: python3 scripts/fork-install.test.py
+      - name: Build immutable review artifact
+        run: |
+          mkdir -p dist/fork
+          touch dist/fork/stale-unchecksummed.tar.gz
+          ./scripts/fork-build
+          test ! -e dist/fork/stale-unchecksummed.tar.gz
+      - name: Exercise actual packaged fork CLI
+        run: ./scripts/fork-artifact-check "$(pwd)/dist/fork/$(awk '{print $2}' dist/fork/checksums.txt)"
+      - name: Platform typecheck and mocked component tests
+        run: |
+          bun run typecheck:platform
+          cd platform
+          bun run test
+      - name: Set up uv for existing Python build tests
+        uses: astral-sh/setup-uv@v6
         with:
-          version: "latest"
-
-      - name: Run Go tests
-        run: go test -vet=all ./...
-
-      - name: Build CLI
-        run: go build -o sst ./cmd/sst
-
-      - name: Build docs
-        run: cd www && bun run build
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version: '0.9.28'
+      - name: Go checks
+        run: |
+          go vet ./...
+          SST_TEST_FORK_MANIFEST="$PWD/dist/fork/manifest.json" go test ./...
+      - name: Clean generated platform and actual engine regression
+        run: ./scripts/fork-integration-check "$RUNNER_TEMP/fork-integration"
+      - name: Rebuild and compare archive bytes
+        run: |
+          cp dist/fork/checksums.txt dist/first-checksums.txt
+          cp dist/fork/files.json dist/first-files.json
+          ./scripts/fork-build
+          python3 - <<'PYTHON'
+          import json
+          first = json.load(open('dist/first-files.json'))
+          second = json.load(open('dist/fork/files.json'))
+          differences = [name for name in sorted(first.keys() | second.keys()) if first.get(name) != second.get(name)]
+          if differences:
+              raise SystemExit('Archive members changed: ' + ', '.join(differences))
+          PYTHON
+          cmp dist/first-checksums.txt dist/fork/checksums.txt
+      - name: Retain review artifacts (not a release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-forum-${{ github.sha }}-${{ matrix.os }}
+          path: |
+            dist/fork/*
+            dist/first-checksums.txt
+            dist/first-files.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Retain integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-forum-integration-${{ github.sha }}-${{ matrix.os }}
+          path: ${{ runner.temp }}/fork-integration/*.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Generated-platform dependency security gate
+        run: node scripts/fork-platform-validate.cjs "$RUNNER_TEMP/fork-integration/generated-platform/.sst/platform" "$RUNNER_TEMP/fork-security"
+      - name: Retain exact dependency inventory and security findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-forum-security-${{ github.sha }}-${{ matrix.os }}
+          path: ${{ runner.temp }}/fork-security/*
+          if-no-files-found: warn
+          retention-days: 30
+  go-security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.9'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.6'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.5.1'
+      - name: Build embedded platform for source analysis
+        run: |
+          bun install --frozen-lockfile
+          CGO_ENABLED=0 SST_SKIP_BRIDGE_IMAGE=true ./platform/scripts/build
+      - name: Go reachable-vulnerability gate
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck -json ./... > "$RUNNER_TEMP/govulncheck.json"
+      - name: Retain Go security findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-forum-go-security-${{ github.sha }}
+          path: ${{ runner.temp }}/govulncheck.json
+          if-no-files-found: warn
+          retention-days: 30
+  forum-node24:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.9'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.6'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build embedded platform on Forum Node runtime
+        run: |
+          node --version
+          python3 scripts/fork-runtime-lock.py
+          bun install --frozen-lockfile
+          CGO_ENABLED=0 SST_SKIP_BRIDGE_IMAGE=true ./platform/scripts/build
+      - name: Frozen generated install, engine selection, tracing and resource tests
+        run: ./scripts/fork-integration-check "$RUNNER_TEMP/forum-node24"
+      - name: Audit the Node 24 generated installation
+        run: node scripts/fork-platform-validate.cjs "$RUNNER_TEMP/forum-node24/generated-platform/.sst/platform" "$RUNNER_TEMP/forum-node24-security"
+      - name: Retain Forum runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-forum-node24-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/forum-node24/*.log
+            ${{ runner.temp }}/forum-node24-security/*
+          if-no-files-found: warn
+          retention-days: 30

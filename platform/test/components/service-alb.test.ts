@@ -1,5 +1,5 @@
-import { describe, beforeAll, it, expect } from "vitest";
-import "../../src/global.d.ts";
+import { describe, beforeAll, it, expect, vi } from "vitest";
+import type {} from "../../src/global.d.ts";
 import * as pulumi from "@pulumi/pulumi";
 import fs from "fs";
 import path from "path";
@@ -25,8 +25,19 @@ global.$cli = {
 };
 // @ts-ignore — fargate.ts uses $jsonStringify for container definitions
 global.$jsonStringify = JSON.stringify;
-// Suppress SST_SERVER RPC calls during tests
-process.env.SST_SERVER = "http://localhost:13557";
+// Bootstrap is a CLI RPC boundary; these component tests must stay offline.
+vi.mock("../../src/components/aws/helpers/bootstrap", () => ({
+  bootstrap: {
+    forRegion: async () => ({
+      asset: "mock-assets",
+      assetEcrRegistryId: "123456789012",
+      assetEcrUrl: "123456789012.dkr.ecr.us-east-1.amazonaws.com/mock",
+      state: "mock-state",
+      appsyncHttp: "",
+      appsyncRealtime: "",
+    }),
+  },
+}));
 
 const createdResources: pulumi.runtime.MockResourceArgs[] = [];
 
@@ -44,6 +55,8 @@ pulumi.runtime.setMocks(
           arn: `arn:aws:mock:us-east-1:123456789:${args.type}/${args.inputs.name}`,
           dnsName: `${args.inputs.name}.us-east-1.elb.amazonaws.com`,
           zoneId: "Z1234567890",
+          vpcId: args.inputs.vpcId || "vpc-123",
+          securityGroups: args.inputs.securityGroups || ["sg-mock-id"],
           name: args.inputs.name || args.name,
           status: "ACTIVE",
           tags: {
@@ -124,9 +137,8 @@ describe("Service with external ALB", function () {
       });
 
       // Service should use the ALB's URL
-      pulumi.all([service.url]).apply(([url]) => {
-        expect(url).toBeDefined();
-      });
+      const url = await new Promise<string | undefined>((resolve) => service.url.apply(resolve));
+      expect(url).toBeDefined();
     });
 
     it("creates service with standard loadBalancer (no ALB instance)", async () => {

@@ -5,16 +5,12 @@ import (
 	"path/filepath"
 
 	"github.com/pulumi/pulumi/sdk/v3"
-	"github.com/sst/sst/v3/pkg/flag"
 )
 
 var PULUMI_VERSION = "v" + sdk.Version.String()
-var BUN_VERSION = func() string {
-	if flag.SST_BUN_VERSION != "" {
-		return flag.SST_BUN_VERSION
-	}
-	return "1.2.1"
-}()
+
+// The embedded binary lock and generated-install evidence use this exact Bun.
+const BUN_VERSION = "1.3.6"
 
 const UV_VERSION = "0.3.2"
 
