@@ -36,7 +36,8 @@ AWS deployment/rollback). Their deployment evidence does not validate this fork.
 `./scripts/fork-toolchain.env` pins Go **1.26.9**, Bun **1.3.6** and Node **26.5.1**.
 Use these exact versions on Linux CI and macOS. Generated installation rejects
 npm fallback (`NO_BUN` / `SST_NO_BUN`) and a Bun executable with another version.
-Node 22 or newer is required at runtime. Go module resolution is readonly;
+Node 22 or newer is required at runtime. Existing Python packaging tests use
+uv 0.9.28; CI installs that tested version before running the Go suite. Go module resolution is readonly;
 Bun installations use committed frozen root/platform lockfiles. Python 3 is used
 only to package archives and copy files. Docker is unnecessary for the CLI build.
 The platform builder fails on `DOCKER_PUSH=true` and skips bridge image builds by

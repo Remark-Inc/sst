@@ -38,6 +38,10 @@ jobs:
           bun run typecheck:platform
           cd platform
           bun run test
+      - name: Set up uv for existing Python build tests
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.28'
       - name: Go checks
         run: |
           go vet ./...
