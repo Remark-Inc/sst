@@ -135,6 +135,9 @@ func (p *Project) writePackageJson() error {
 	}
 	delete(result, "devDependencies")
 	for _, entry := range p.lock {
+		if dependencies[entry.Package] != entry.Version {
+			return fmt.Errorf("provider %s@%s is outside this fork's reviewed runtime lock; update and review the fork dependencies before using it", entry.Package, entry.Version)
+		}
 		slog.Info("adding dependency", "name", entry.Name)
 		dependencies[entry.Package] = entry.Version
 	}
@@ -222,7 +225,14 @@ func (p *Project) fetchDeps() error {
 	if err != nil || strings.TrimSpace(string(version)) != global.BUN_VERSION {
 		return fmt.Errorf("Forum SST requires Bun %s at %s (version check returned %q): %v", global.BUN_VERSION, manager, strings.TrimSpace(string(version)), err)
 	}
-	cmd := process.Command(manager, "install")
+	lock, err := platform.RuntimeLock()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(p.PathPlatformDir(), "bun.lockb"), lock, 0644); err != nil {
+		return err
+	}
+	cmd := process.Command(manager, "install", "--frozen-lockfile")
 	cmd.Dir = p.PathPlatformDir()
 	output, err := cmd.CombinedOutput()
 	if err != nil {

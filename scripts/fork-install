@@ -5,19 +5,35 @@ cd "$(dirname "$0")"
 if [ "$#" -ne 1 ]; then echo 'Usage: ./install /absolute/path/to/versioned-install-directory' >&2; exit 1; fi
 case "$1" in /*) ;; *) echo 'Install destination must be absolute' >&2; exit 1;; esac
 python3 - "$1" <<'PY'
-import json, pathlib, shutil, sys
+import json, os, pathlib, shutil, sys, tempfile
 manifest = json.loads(pathlib.Path('manifest.json').read_text())
 if not manifest['distributable']:
     raise SystemExit('Dirty review builds cannot be installed as distributions')
 dest = pathlib.Path(sys.argv[1])
-# Refuse overwrite: switching versions must be an explicit caller decision.
-dest.mkdir(parents=True, exist_ok=False)
-for src in pathlib.Path('.').iterdir():
-    if src.is_file():
-        shutil.copy2(src, dest / src.name)
-    elif src.name == 'third-party-notices':
-        shutil.copytree(src, dest / src.name)
-(dest / 'sst-forum').write_text('#!/usr/bin/env bash\nset -euo pipefail\nexport SST_SKIP_LOCAL=true\nexec "$(dirname "$0")/sst" "$@"\n')
-(dest / 'sst-forum').chmod(0o755)
+# Serialize installers for this immutable destination, including empty/symlink paths.
+dest.parent.mkdir(parents=True, exist_ok=True)
+lock = dest.with_name(dest.name + '.install-lock')
+try:
+    lock.mkdir()
+except FileExistsError:
+    raise SystemExit(f'Install lock exists: {lock}; remove it only if no installer is running')
+try:
+    if os.path.lexists(dest):
+        raise SystemExit(f'Install destination already exists: {dest}')
+    # Stage on the destination filesystem. Failed copies/writes leave no partial install.
+    with tempfile.TemporaryDirectory(prefix=f'.{dest.name}.install-', dir=dest.parent) as temp:
+        stage = pathlib.Path(temp)
+        for src in pathlib.Path('.').iterdir():
+            if src.is_file():
+                shutil.copy2(src, stage / src.name)
+            elif src.name == 'third-party-notices':
+                shutil.copytree(src, stage / src.name)
+        (stage / 'sst-forum').write_text('#!/usr/bin/env bash\nset -euo pipefail\nexport SST_SKIP_LOCAL=true\nexec "$(dirname "$0")/sst" "$@"\n')
+        (stage / 'sst-forum').chmod(0o755)
+        if os.path.lexists(dest):
+            raise SystemExit(f'Install destination already exists: {dest}')
+        os.rename(stage, dest)
+finally:
+    lock.rmdir()
 print(f'Invoke {dest}/sst-forum directly; version {manifest["version"]}')
 PY

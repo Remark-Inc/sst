@@ -12,7 +12,8 @@ would bypass this fork. Invoke the versioned fork executable explicitly.
   Provider package versions are intentionally unchanged. AWS JavaScript clients
   and build/test dependencies receive targeted security updates; retry semantics
   are preserved by mocked compatibility tests. Generated installations omit
-  repository test tools while retaining TypeScript declaration packages.
+  repository test tools while retaining TypeScript declarations and runtime Vite
+  for Remix config loading.
 - Apply a version/source-checked Pulumi Node tracing fix for gRPC metadata propagation,
   with idempotence, malformed-input/control and mocked secret/resource tests.
 - Select the language host deterministically from the matching engine installation;
@@ -36,9 +37,13 @@ AWS deployment/rollback). Their deployment evidence does not validate this fork.
 `./scripts/fork-toolchain.env` pins Go **1.26.9**, Bun **1.3.6** and Node **26.5.1**.
 Use these exact versions on Linux CI and macOS. Generated installation rejects
 npm fallback (`NO_BUN` / `SST_NO_BUN`) and a Bun executable with another version.
-Node 22 or newer is required at runtime. Existing Python packaging tests use
+Node 22 or newer is required by the tracing patch; validated runtime targets are
+Node 26.5.1 and Forum's Node 24 line. The separate Linux Node 24 CI job records the
+resolved patch version and runs the clean frozen install, real engine/host
+regression, tracing/resource/secret tests and generated dependency audit.
+Existing Python packaging tests use
 uv 0.9.28; CI installs that tested version before running the Go suite. Go module resolution is readonly;
-Bun installations use committed frozen root/platform lockfiles. Python 3 is used
+Bun installations use committed frozen root/platform/runtime lockfiles. Python 3 is used
 only to package archives and copy files. Docker is unnecessary for the CLI build.
 The platform builder fails on `DOCKER_PUSH=true` and skips bridge image builds by
 default; an explicit local build uses a local image name and cannot push.
@@ -83,6 +88,21 @@ Never use `npx sst`, `bunx sst`, an unqualified `sst`, `latest`, or `sst upgrade
 select this fork. `SST_PULUMI_PATH` selects a complete engine installation; this fork validates
 its engine and sibling Node host versions. It is not a Node SDK fix.
 Root workspace overrides also do not remediate `.sst/platform` generated installs.
+
+`platform/runtime/package.json` and `platform/runtime/bun.lockb` describe the
+reviewed deployment dependencies, excluding test tools. Regenerate them only in a
+reviewed dependency update with `python3 scripts/fork-runtime-lock.py --update`;
+builds check manifest consistency and actual generated installs use
+`bun install --frozen-lockfile`. An unexpected dependency change fails installation
+and removes its completion receipt. Provider overrides outside the embedded
+package versions are rejected with an explicit update instruction. Forum's
+current default AWS configuration is supported; new providers or provider version
+overrides require a fork dependency/lock update and the same security checks.
+
+Offline archive installation stages files beside the destination and promotes
+them only after the wrapper is complete; failures clean staging and permit retry.
+Pulumi repair retains the previous directory until promotion succeeds, restores
+it on promotion failure, and reports retained recovery paths if rollback fails.
 
 The ECS Task dev image remains upstream `ghcr.io/anomalyco/sst/bridge-task:latest`
 in the component source. Building this archive does **not** create or publish a
@@ -136,6 +156,23 @@ The current Forum workflow command is
 A separately reviewed Forum change should substitute the absolute approved fork
 CLI for `pnpm sst`, keeping the same suite. Do not run it under this task's
 local-only authorization.
+
+Before switching Forum, inventory all CLI consumers and route each through one
+absolute, checksum-verified fork executable variable. Required call sites include:
+
+- Native CodeBuild deployment, refresh and migration commands in
+  `.github/scripts/native-deploy.sh`.
+- Staging/production GitHub and CodeBuild deployment workflows and the standalone
+  smoke workflow, including their shell commands.
+- Nested helpers `read-staging-outputs.sh`, `verify-staging.sh`, and
+  `wait-for-ecs.mjs`; the latter directly spawns `pnpm sst`.
+
+Search Forum scripts, workflows and package scripts for `pnpm sst`, `npx sst`,
+`bunx sst`, and direct/spawned SST commands. Verify the actual executable/version
+used by each deployment and validation path, so nested smoke/refresh helpers
+cannot silently invoke upstream SST. These substitutions belong in the Forum
+integration PR, alongside an approved permanent artifact channel; this fork PR
+does not perform them or publish a release.
 
 Forum Adam workaround PR 392 currently removes `/usr/local/bin/pulumi-language-nodejs`
 in staging/production/smoke. **Retain it.** The conflicting-host regression is a

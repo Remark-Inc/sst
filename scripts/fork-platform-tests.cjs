@@ -15,6 +15,25 @@ const sdkPath = platformRequire.resolve("@pulumi/pulumi/package.json");
 const sdkRequire = createRequire(sdkPath);
 const expected = require("../platform/package.json").dependencies["@pulumi/pulumi"];
 
+test("generated platform loads a Remix Vite config without app-local Vite", async () => {
+  const { pathToFileURL } = require("node:url");
+  const vitePath = platformRequire.resolve("vite");
+  assert.ok(fs.realpathSync(vitePath).startsWith(platform + path.sep),
+    `Vite resolved outside target installation: ${vitePath}`);
+  const vite = await import(pathToFileURL(vitePath).href);
+  const app = fs.mkdtempSync(path.join(os.tmpdir(), "sst-remix-config-"));
+  try {
+    const configPath = path.join(app, "vite.config.mjs");
+    fs.writeFileSync(configPath, 'export default { base: "/forum/", build: { outDir: "build/client" } };\n');
+    const result = await vite.loadConfigFromFile({ command: "build", mode: "production" }, configPath, app);
+    assert.equal(result.config.base, "/forum/");
+    assert.equal(result.config.build.outDir, "build/client");
+    assert.equal(fs.existsSync(path.join(app, "node_modules")), false);
+  } finally {
+    fs.rmSync(app, { recursive: true, force: true });
+  }
+});
+
 test("the installed SDK is the fork's exact version and comes from the target installation", () => {
   assert.equal(sdkRequire("./package.json").version, expected);
   assert.ok(fs.realpathSync(sdkPath).startsWith(platform + path.sep),

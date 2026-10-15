@@ -171,7 +171,12 @@ func InstallPulumi(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		defer os.RemoveAll(tmp)
+		cleanupStaging := true
+		defer func() {
+			if cleanupStaging {
+				_ = os.RemoveAll(tmp)
+			}
+		}()
 		archive, err := os.CreateTemp(filepath.Dir(target), ".archive-")
 		if err != nil {
 			return nil, err
@@ -251,15 +256,44 @@ func InstallPulumi(ctx context.Context) error {
 		}
 		// A previous SDK uses a different directory, so upgrades cannot leave a new
 		// engine beside an old language host. Only replace an invalid same-version install.
-		if err := os.RemoveAll(target); err != nil {
-			return nil, err
-		}
-		if err := os.Rename(tmp, target); err != nil {
+		if err := promotePulumiInstall(tmp, target, os.Rename); err != nil {
+			// Keep the validated replacement available even if rollback also fails.
+			cleanupStaging = false
 			return nil, err
 		}
 		return nil, nil
 	})
 	return err
+}
+
+// The caller holds the per-version install lock. Keep the previous directory
+// until promotion succeeds, and restore it if promotion fails. rename is passed
+// explicitly so tests can exercise filesystem failures without global hooks.
+func promotePulumiInstall(staged, target string, rename func(string, string) error) error {
+	backup := staged + ".previous"
+	hadPrevious := false
+	if _, err := os.Lstat(target); err == nil {
+		if err := rename(target, backup); err != nil {
+			return fmt.Errorf("preserve previous Pulumi installation: %w; validated replacement retained at %s", err, staged)
+		}
+		hadPrevious = true
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect Pulumi installation: %w; validated replacement retained at %s", err, staged)
+	}
+	if err := rename(staged, target); err != nil {
+		if hadPrevious {
+			if rollbackErr := rename(backup, target); rollbackErr != nil {
+				return fmt.Errorf("promote Pulumi installation: %w; rollback failed: %v; previous installation retained at %s; validated replacement retained at %s", err, rollbackErr, backup, staged)
+			}
+		}
+		return fmt.Errorf("promote Pulumi installation: %w; validated replacement retained at %s", err, staged)
+	}
+	if hadPrevious {
+		if err := os.RemoveAll(backup); err != nil {
+			slog.Warn("Pulumi installed but previous directory could not be removed", "path", backup, "error", err)
+		}
+	}
+	return nil
 }
 
 func executableName(name string) string {

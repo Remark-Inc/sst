@@ -18,6 +18,7 @@ if [ -n "$(git status --porcelain --untracked-files=all -- . ':!work')" ]; then
   version="$version-dirty"
 fi
 export CGO_ENABLED=0 GOTOOLCHAIN=local SST_SKIP_BRIDGE_IMAGE=true
+python3 scripts/fork-runtime-lock.py
 bun install --frozen-lockfile
 # A cd into platform still belongs to the root Bun workspace. Validate the
 # separate embedded lock outside that workspace, including its install patch.
@@ -49,6 +50,8 @@ cp scripts/fork-install "$stage/install"
 cp go.mod go.sum "$stage/"
 cp platform/package.json "$stage/platform-package.json"
 cp platform/bun.lockb "$stage/platform-bun.lockb"
+cp platform/runtime/package.json "$stage/runtime-package.json"
+cp platform/runtime/bun.lockb "$stage/runtime-bun.lockb"
 cp bun.lockb "$stage/root-bun.lockb"
 python3 scripts/fork-package.py "$stage" "$version" "$commit" "$GOOS" "$GOARCH"
 printf 'Built %s (%s/%s) in dist/fork\n' "$version" "$GOOS" "$GOARCH"

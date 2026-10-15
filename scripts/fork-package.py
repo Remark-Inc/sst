@@ -21,6 +21,8 @@ metadata = {
     'node': subprocess.check_output(['node', '--version'], text=True).strip(),
     'platformPackageSHA256': hashlib.sha256(Path('platform/package.json').read_bytes()).hexdigest(),
     'platformLockSHA256': hashlib.sha256(Path('platform/bun.lockb').read_bytes()).hexdigest(),
+    'runtimePackageSHA256': hashlib.sha256(Path('platform/runtime/package.json').read_bytes()).hexdigest(),
+    'runtimeLockSHA256': hashlib.sha256(Path('platform/runtime/bun.lockb').read_bytes()).hexdigest(),
 }
 (stage / 'manifest.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
 notices = stage / 'third-party-notices'

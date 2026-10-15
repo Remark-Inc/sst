@@ -1,22 +1,23 @@
-✔ the installed SDK is the fork's exact version and comes from the target installation (0.765125ms)
-✔ providers cannot retain a legacy Pulumi SDK or vulnerable tracing generation (29.961875ms)
-✔ tracing patch is idempotent and refuses changed versions or source (3.106416ms)
-✔ mocked resource outputs preserve values and secret taint (230.965042ms)
-✔ installed OpenTelemetry baggage parser accepts the valid control (9.05575ms)
-✔ installed OpenTelemetry bounds baggage entries and bytes (1.205666ms)
-✔ installed OpenTelemetry safely ignores malformed baggage: broken=% (0.4575ms)
-✔ installed OpenTelemetry safely ignores malformed baggage: broken=%G1 (0.095ms)
-✔ installed OpenTelemetry safely ignores malformed baggage: broken=%E0%A4%A (0.094417ms)
-✔ installed OpenTelemetry safely ignores malformed baggage: %ZZ=value (0.126125ms)
-✔ installed OpenTelemetry safely ignores malformed baggage: missing-equals (0.081291ms)
-✔ Pulumi SDK tracing enabled: root context and outgoing gRPC metadata (120.507209ms)
-✔ Pulumi SDK tracing disabled: root context and outgoing gRPC metadata (98.777958ms)
-✔ Pulumi SDK tracing malformed: root context and outgoing gRPC metadata (120.545583ms)
-ℹ tests 14
+✔ generated platform loads a Remix Vite config without app-local Vite (252.901458ms)
+✔ the installed SDK is the fork's exact version and comes from the target installation (0.358ms)
+✔ providers cannot retain a legacy Pulumi SDK or vulnerable tracing generation (36.10375ms)
+✔ tracing patch is idempotent and refuses changed versions or source (3.162542ms)
+✔ mocked resource outputs preserve values and secret taint (372.495875ms)
+✔ installed OpenTelemetry baggage parser accepts the valid control (16.617125ms)
+✔ installed OpenTelemetry bounds baggage entries and bytes (1.361584ms)
+✔ installed OpenTelemetry safely ignores malformed baggage: broken=% (0.93425ms)
+✔ installed OpenTelemetry safely ignores malformed baggage: broken=%G1 (0.194667ms)
+✔ installed OpenTelemetry safely ignores malformed baggage: broken=%E0%A4%A (0.222834ms)
+✔ installed OpenTelemetry safely ignores malformed baggage: %ZZ=value (0.130959ms)
+✔ installed OpenTelemetry safely ignores malformed baggage: missing-equals (0.108792ms)
+✔ Pulumi SDK tracing enabled: root context and outgoing gRPC metadata (150.3955ms)
+✔ Pulumi SDK tracing disabled: root context and outgoing gRPC metadata (98.426166ms)
+✔ Pulumi SDK tracing malformed: root context and outgoing gRPC metadata (133.519833ms)
+ℹ tests 15
 ℹ suites 0
-ℹ pass 14
+ℹ pass 15
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 669.038042
+ℹ duration_ms 1120.95525

@@ -22,7 +22,7 @@ It is not deployment approval. Provider package versions remain unchanged.
   with a mocked request handler (no sockets or credentials).
 - Actual generated installation through `Project.CopyPlatform`,
   `writePackageJson`, and `fetchDeps` (`TestGeneratedPlatformInstall`).
-- 14 generated-install checks: mocked resource/secret output propagation;
+- 15 generated-install checks: runtime Vite loading without app-local Vite; mocked resource/secret output propagation;
   installed SDK/runtime inventory; valid trace parent reaching a local gRPC
   monitor; disabled and malformed trace controls; malformed/oversized baggage
   and valid controls; tracing patch idempotence and changed-version/source refusal.
@@ -32,6 +32,9 @@ It is not deployment approval. Provider package versions remain unchanged.
   mixed/missing hosts, repair/checksum refusal, symlink/relative overrides, lock
   cancellation and generated-platform SDK/reinstall checks also pass.
 - Publishing guards and offline installer side-by-side/overwrite/dirty-build tests.
+  Forced copy/wrapper failures leave no partial destination and permit retry.
+  Pulumi promotion tests cover backup/promotion/rollback failures, preserve old
+  and validated replacement files, and exercise retry after a transient failure.
 
 No local `sst deploy`, AWS mutation, release or package publication was run.
 Linux CI and final committed archive reproducibility/install results must be read
@@ -71,9 +74,14 @@ Remediation keeps all Pulumi provider versions unchanged: AWS JavaScript clients
 move within v3, obsolete AWS retry middleware moves to its maintained Smithy
 implementation with behavior tests, Glob/esbuild and Vitest/Vite are updated,
 and compatible transitive ranges are refreshed in the standalone lock. Generated
-platforms retain TypeScript declaration packages but omit repository test tools.
+platforms retain TypeScript declaration packages and runtime Vite but omit repository test tools.
 SST rejects npm fallback and non-pinned Bun installers so unvalidated lockless
-resolution cannot silently replace the reviewed generated tree. CI fails on any
+resolution cannot silently replace the reviewed generated tree. A separate embedded
+runtime manifest/lock is installed with `--frozen-lockfile`; an actual generated
+install regression changes a dependency requirement and proves installation fails
+without a completion receipt. Provider overrides outside the reviewed versions
+are rejected. Linux CI also tests Forum's Node 24 runtime; consult its current
+check result rather than assuming the local Node 26 result establishes compatibility. CI fails on any
 new generated-platform finding and preserves the raw evidence.
 
 Scope: this scan covers the generated deployment platform and standalone platform

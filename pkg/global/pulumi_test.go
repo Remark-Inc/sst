@@ -197,6 +197,65 @@ func TestPulumiRelativeOverride(t *testing.T) {
 	}
 }
 
+func TestPromotePulumiInstallFailureRecovery(t *testing.T) {
+	for _, failure := range []string{"backup", "promotion", "rollback", "none"} {
+		t.Run(failure, func(t *testing.T) {
+			root := t.TempDir()
+			staged, target := filepath.Join(root, "staged"), filepath.Join(root, "target")
+			for dir, content := range map[string]string{staged: "new", target: "previous"} {
+				if err := os.Mkdir(dir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "engine"), []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rename := func(from, to string) error {
+				if (failure == "backup" && from == target) ||
+					((failure == "promotion" || failure == "rollback") && from == staged) ||
+					(failure == "rollback" && from == staged+".previous") {
+					return fmt.Errorf("injected rename failure")
+				}
+				return os.Rename(from, to)
+			}
+			err := promotePulumiInstall(staged, target, rename)
+			read := func(dir, want string) {
+				data, err := os.ReadFile(filepath.Join(dir, "engine"))
+				if err != nil || string(data) != want {
+					t.Fatalf("%s: got %q, %v; want %q", dir, data, err, want)
+				}
+			}
+			if failure == "none" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				read(target, "new")
+				if _, err := os.Stat(staged + ".previous"); !os.IsNotExist(err) {
+					t.Fatal("successful promotion retained obsolete backup", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), staged) {
+				t.Fatal("failure must report retained replacement path", err)
+			}
+			read(staged, "new")
+			if failure == "rollback" {
+				read(staged+".previous", "previous")
+				if !strings.Contains(err.Error(), staged+".previous") {
+					t.Fatal("rollback error must report recovery path", err)
+				}
+			} else {
+				read(target, "previous")
+				// A retry after a transient failure can promote the retained copy.
+				if err := promotePulumiInstall(staged, target, os.Rename); err != nil {
+					t.Fatal(err)
+				}
+				read(target, "new")
+			}
+		})
+	}
+}
+
 func TestPulumiInstallLockCancellation(t *testing.T) {
 	oldConfig, oldOverride := configDir, flag.SST_PULUMI_PATH
 	t.Cleanup(func() { configDir, flag.SST_PULUMI_PATH = oldConfig, oldOverride })

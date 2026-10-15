@@ -56,6 +56,9 @@ func TestForkPlatformUpgradeAndReinstall(t *testing.T) {
 	if err := json.Unmarshal(data, &pkg); err != nil {
 		t.Fatal(err)
 	}
+	if pkg.Dependencies["vite"] != "7.3.7" {
+		t.Fatal("generated platform must retain Vite for Remix config loading")
+	}
 	if len(pkg.DevDependencies) != 0 || pkg.Dependencies["@types/archiver"] == "" {
 		t.Fatal("generated platform must retain declarations but omit repository test tools")
 	}
@@ -123,7 +126,49 @@ func TestGeneratedPlatformInstall(t *testing.T) {
 	if p.NeedsInstall() {
 		t.Fatal("clean installed platform still needs installation")
 	}
+	// The generated manifest must not be allowed to resolve a dependency outside
+	// the reviewed runtime lock, even if a valid install receipt already exists.
+	manifestPath := filepath.Join(p.PathPlatformDir(), "package.json")
+	original, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]interface{}
+	if err := json.Unmarshal(original, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["dependencies"].(map[string]interface{})["typescript"] = "5.7.3"
+	changed, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, changed, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.fetchDeps(); err == nil || !strings.Contains(err.Error(), "lockfile") {
+		t.Fatalf("unreviewed dependency resolution was not rejected: %v", err)
+	}
+	if !p.NeedsInstall() {
+		t.Fatal("rejected install retained a completion receipt")
+	}
+	if err := os.WriteFile(manifestPath, original, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.fetchDeps(); err != nil {
+		t.Fatal("reviewed manifest must install again", err)
+	}
 	t.Log("generated platform:", p.PathPlatformDir())
+}
+
+func TestUnreviewedProviderRejected(t *testing.T) {
+	p := &Project{root: t.TempDir(), app: &App{Providers: map[string]interface{}{}}}
+	if err := p.CopyPlatform("4.17.2-forum.test"); err != nil {
+		t.Fatal(err)
+	}
+	p.lock = ProviderLock{{Name: "aws", Package: "@pulumi/aws", Version: "7.21.0", Alias: "aws"}}
+	if err := p.writePackageJson(); err == nil || !strings.Contains(err.Error(), "reviewed runtime lock") {
+		t.Fatal("unreviewed provider version must fail closed", err)
+	}
 }
 
 func TestFailedForkReinstallInvalidatesReceipt(t *testing.T) {

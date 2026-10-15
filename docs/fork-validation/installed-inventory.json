@@ -3,8 +3,8 @@
   "platform": "darwin",
   "architecture": "arm64",
   "manifestAndLockSHA256": {
-    "package.json": "f0ea8ae211bcaf0c231a4a7f173613275a2e8f3b9037930fc82bb9eff12ee950",
-    "bun.lockb": "7a5656b71e74e5cb82e9799a53b6e3789f61aecedcc717b7aa875d94a2691197"
+    "package.json": "aaaa23f8b7cfee5c6bb0958628a6feeb45b4dc0d5ae695b55e65d625342a9b12",
+    "bun.lockb": "ec3a8725419a0fc47c23f4d37948ce3aaef219009fc03783ebaf6cf77dc82a72"
   },
   "sdkVersion": "3.267.0",
   "tracingResolution": {
@@ -263,6 +263,13 @@
       "path": "node_modules/@esbuild/darwin-arm64",
       "license": "MIT",
       "manifestSHA256": "79a69873b3ae6dbc47d8c3c8027b9563630f65e8fe58690183c5398a52410e7f"
+    },
+    {
+      "name": "@esbuild/darwin-arm64",
+      "version": "0.28.2",
+      "path": "node_modules/vite/node_modules/esbuild/node_modules/@esbuild/darwin-arm64",
+      "license": "MIT",
+      "manifestSHA256": "4e652c9e4410daf03da852a664940153601fac397233cdcf276b4b1a312454b9"
     },
     {
       "name": "@gar/promise-retry",
@@ -776,6 +783,13 @@
       "manifestSHA256": "ce1a1f03ce0eaf22bf78a67b342809f96e3973be7abb2052715465e275afcf22"
     },
     {
+      "name": "@rollup/rollup-darwin-arm64",
+      "version": "4.64.7",
+      "path": "node_modules/@rollup/rollup-darwin-arm64",
+      "license": "MIT",
+      "manifestSHA256": "8b5c90a37cc62342b2fdfe564899134d09d56c3f33403797a099b201a9f2d05d"
+    },
+    {
       "name": "@sigstore/bundle",
       "version": "4.0.0",
       "path": "node_modules/@sigstore/bundle",
@@ -935,6 +949,13 @@
       "path": "node_modules/@types/bun",
       "license": "MIT",
       "manifestSHA256": "2f64066199bbf5109b953e62404fcfe8e9f00677cb0255e6568173f9d31c09b8"
+    },
+    {
+      "name": "@types/estree",
+      "version": "1.0.9",
+      "path": "node_modules/@types/estree",
+      "license": "MIT",
+      "manifestSHA256": "3537a6a503f57901111d8a29df81962887653deb199b9a795c7fb50bbfdd1bdc"
     },
     {
       "name": "@types/google-protobuf",
@@ -1434,6 +1455,13 @@
       "manifestSHA256": "cb7d5b1fe478f8cbaae566a86031b6fdf5f7d444354f35d1cb3cba9adf6d2935"
     },
     {
+      "name": "esbuild",
+      "version": "0.28.2",
+      "path": "node_modules/vite/node_modules/esbuild",
+      "license": "MIT",
+      "manifestSHA256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490"
+    },
+    {
       "name": "escalade",
       "version": "3.2.0",
       "path": "node_modules/escalade",
@@ -1495,6 +1523,13 @@
       "path": "node_modules/fs.realpath",
       "license": "ISC",
       "manifestSHA256": "2985019b1b3cf5894df9b831816f7b480833931da982489e3a98c346ce7da897"
+    },
+    {
+      "name": "fsevents",
+      "version": "2.3.3",
+      "path": "node_modules/fsevents",
+      "license": "MIT",
+      "manifestSHA256": "500839fcc76f6c5efcb454e6614b23c26775e75e1140619fff9ca64c291aec2b"
     },
     {
       "name": "get-caller-file",
@@ -1987,6 +2022,13 @@
       "manifestSHA256": "1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40"
     },
     {
+      "name": "nanoid",
+      "version": "3.3.20",
+      "path": "node_modules/nanoid",
+      "license": "MIT",
+      "manifestSHA256": "e2a77185ded1c006171e4e2f8b316d0e3b4c51a135a190851cfc888ea428f6bf"
+    },
+    {
       "name": "negotiator",
       "version": "1.1.0",
       "path": "node_modules/negotiator",
@@ -2162,11 +2204,25 @@
       "manifestSHA256": "6cccffe6bb2a39e2e4f257aefc3f5d553d98199a0c79558bdb5ea2880fa030a3"
     },
     {
+      "name": "picocolors",
+      "version": "1.1.1",
+      "path": "node_modules/picocolors",
+      "license": "ISC",
+      "manifestSHA256": "ef2ac226c4811d312e12c64214c453878653e834482125ae475f27cea60de737"
+    },
+    {
       "name": "picomatch",
       "version": "4.0.7",
       "path": "node_modules/picomatch",
       "license": "MIT",
       "manifestSHA256": "479b70b87aa7b44344d62c8a459ae7e53dd2bca6c61f1396bd55e63e9de73fc6"
+    },
+    {
+      "name": "postcss",
+      "version": "8.5.30",
+      "path": "node_modules/postcss",
+      "license": "MIT",
+      "manifestSHA256": "d75ef939bab5428fe03930321824c136d66b7b559908650fe8426a8871169cf3"
     },
     {
       "name": "postcss-selector-parser",
@@ -2274,6 +2330,13 @@
       "manifestSHA256": "ded84be62b95f78893a1efa58cee4a9f87aa1e99a0e46e633cef02f48a821abe"
     },
     {
+      "name": "rollup",
+      "version": "4.64.7",
+      "path": "node_modules/rollup",
+      "license": "MIT",
+      "manifestSHA256": "6fe36f6837953205904f1fd6b99b2d07d3b47eb60fe43a97aac1570b7a125877"
+    },
+    {
       "name": "safe-buffer",
       "version": "5.1.2",
       "path": "node_modules/lazystream/node_modules/readable-stream/node_modules/safe-buffer",
@@ -2370,6 +2433,13 @@
       "path": "node_modules/source-map",
       "license": "BSD-3-Clause",
       "manifestSHA256": "3fdebd9f5c0107bcf7b73e0d17e0147042bcfb74884106e4428afbf17171ef06"
+    },
+    {
+      "name": "source-map-js",
+      "version": "1.2.2",
+      "path": "node_modules/source-map-js",
+      "license": "BSD-3-Clause",
+      "manifestSHA256": "9f1ea63b1661d0f6e5fcd50b625d86cddd77de870a0019b23262360987b487f5"
     },
     {
       "name": "source-map-support",
@@ -2636,6 +2706,13 @@
       "path": "node_modules/validate-npm-package-name",
       "license": "ISC",
       "manifestSHA256": "f99a0874b70ee91c258e0dd49278db7bea941e97a95e36437e02a5588fe953af"
+    },
+    {
+      "name": "vite",
+      "version": "7.3.7",
+      "path": "node_modules/vite",
+      "license": "MIT",
+      "manifestSHA256": "aae1f593c0e6f320989b60af6e90f8ed4ea5137e5a0b9db663f9b0088333eb3c"
     },
     {
       "name": "walk-up-path",

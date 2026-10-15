@@ -120,3 +120,36 @@ jobs:
           path: ${{ runner.temp }}/govulncheck.json
           if-no-files-found: warn
           retention-days: 30
+  forum-node24:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.9'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.6'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build embedded platform on Forum Node runtime
+        run: |
+          node --version
+          python3 scripts/fork-runtime-lock.py
+          bun install --frozen-lockfile
+          CGO_ENABLED=0 SST_SKIP_BRIDGE_IMAGE=true ./platform/scripts/build
+      - name: Frozen generated install, engine selection, tracing and resource tests
+        run: ./scripts/fork-integration-check "$RUNNER_TEMP/forum-node24"
+      - name: Audit the Node 24 generated installation
+        run: node scripts/fork-platform-validate.cjs "$RUNNER_TEMP/forum-node24/generated-platform/.sst/platform" "$RUNNER_TEMP/forum-node24-security"
+      - name: Retain Forum runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-forum-node24-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/forum-node24/*.log
+            ${{ runner.temp }}/forum-node24-security/*
+          if-no-files-found: warn
+          retention-days: 30

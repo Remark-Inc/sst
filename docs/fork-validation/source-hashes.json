@@ -1,9 +1,11 @@
 {
   "go.mod": "336f9e633cdac58936d54102ceaf645818ec4008c41fcdd309dfb15f0cd057bd",
   "go.sum": "dfdc47375d6ac96f923ed456b7595dff610892bd328921ea485991325282e86a",
-  "bun.lockb": "18638905c87cca56bf8f50ddc7044b4dc95b534dbd8b1546092345548c0f1be9",
-  "platform/package.json": "a89bf98cd8cc7edac1b352f16b136b1afd7c80a2ffebc3b49be2eee52ea2a319",
-  "platform/bun.lockb": "734cb1297c31b00058e4985593f9c3363c45b3f38430b9177012a011f8568172",
+  "bun.lockb": "c10abb220f94c924123f1d6255fb0d66c2421096e7a7b1a78d442d5bf8b5d0ec",
+  "platform/package.json": "0bc2930fbe86b7a2ff577098a1f90f2ee8860dfce8a8d54f04d61be6e312e489",
+  "platform/bun.lockb": "d55907a318d84686e1789ee036b0f17aeba49967f9fd3ced7ec8a23033f3f4f0",
   "platform/scripts/patch-pulumi-tracing.cjs": "6f9fb23a46ce797eb9d305f63c8b942f596524c1609a0209657bc76175678b19",
-  "pkg/global/pulumi-checksums.txt": "60d8c1fb936df1f3ea3a8b82fe588247abf2503c4ea3c63495a1c2011c771f66"
+  "pkg/global/pulumi-checksums.txt": "60d8c1fb936df1f3ea3a8b82fe588247abf2503c4ea3c63495a1c2011c771f66",
+  "platform/runtime/package.json": "926b6a440bd1094f9f29f8453bb49683d7d8877becd1231e8ac3cbb46e5def2e",
+  "platform/runtime/bun.lockb": "ec3a8725419a0fc47c23f4d37948ce3aaef219009fc03783ebaf6cf77dc82a72"
 }
