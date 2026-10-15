@@ -36,7 +36,6 @@ bun install --frozen-lockfile
 rm -rf platform/dist
 ./platform/scripts/build
 # Match the engine/platform identity to the exact source tree.
-mkdir -p dist/fork
 stage=$(mktemp -d "${TMPDIR:-/tmp}/sst-forum-build.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
 GOOS=${GOOS:-$(go env GOOS)} GOARCH=${GOARCH:-$(go env GOARCH)}
@@ -53,5 +52,9 @@ cp platform/bun.lockb "$stage/platform-bun.lockb"
 cp platform/runtime/package.json "$stage/runtime-package.json"
 cp platform/runtime/bun.lockb "$stage/runtime-bun.lockb"
 cp bun.lockb "$stage/root-bun.lockb"
+# This directory is one build's output, not an archive repository. Otherwise
+# wildcard uploads can include old binaries absent from the current checksums.
+rm -rf dist/fork
+mkdir -p dist/fork
 python3 scripts/fork-package.py "$stage" "$version" "$commit" "$GOOS" "$GOARCH"
 printf 'Built %s (%s/%s) in dist/fork\n' "$version" "$GOOS" "$GOARCH"

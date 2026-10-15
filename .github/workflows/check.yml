@@ -30,7 +30,11 @@ jobs:
       - name: Check installer upgrade and overwrite behavior
         run: python3 scripts/fork-install.test.py
       - name: Build immutable review artifact
-        run: ./scripts/fork-build
+        run: |
+          mkdir -p dist/fork
+          touch dist/fork/stale-unchecksummed.tar.gz
+          ./scripts/fork-build
+          test ! -e dist/fork/stale-unchecksummed.tar.gz
       - name: Exercise actual packaged fork CLI
         run: ./scripts/fork-artifact-check "$(pwd)/dist/fork/$(awk '{print $2}' dist/fork/checksums.txt)"
       - name: Platform typecheck and mocked component tests
