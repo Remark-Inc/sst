@@ -43,22 +43,35 @@ for root in (Path('node_modules'), Path('platform/node_modules')):
                     dest = notices / 'js' / src
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(src.read_bytes())
-# Retain direct and transitive Go module notices without shipping module source.
-raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-m', '-json', 'all'], text=True)
-decoder = json.JSONDecoder()
-while raw.strip():
-    module, offset = decoder.raw_decode(raw.lstrip())
-    raw = raw.lstrip()[offset:]
+# Collect only modules in the binaries we actually ship. Listing all modules
+# and skipping uncached directories made notices depend on prior test runs.
+modules = {}
+for package, build_env in [
+    ('./cmd/sst', os.environ.copy()),
+    ('./platform/functions/bridge', {**os.environ, 'GOOS': 'linux', 'GOARCH': 'amd64'}),
+]:
+    raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-deps', '-json', package],
+                                  text=True, env=build_env)
+    decoder = json.JSONDecoder()
+    while raw.strip():
+        entry, offset = decoder.raw_decode(raw.lstrip())
+        raw = raw.lstrip()[offset:]
+        module = entry.get('Module')
+        if module and not module.get('Main'):
+            modules[module['Path']] = module
+for module in sorted(modules.values(), key=lambda item: item['Path']):
     directory = module.get('Dir')
-    if module.get('Main'):
-        continue
     if not directory:
-        raise RuntimeError(f"Module {module['Path']} is not materialized; run go mod download all")
+        raise RuntimeError(f"Compiled module {module['Path']} is missing its source directory")
     for src in Path(directory).iterdir():
         if src.is_file() and src.name.lower().startswith(('license', 'copying', 'notice')):
             dest = notices / 'go' / module['Path'] / src.name
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(src.read_bytes())
+# Include the standard library/runtime license as well as third-party modules.
+goroot = Path(subprocess.check_output(['go', 'env', 'GOROOT'], text=True).strip())
+(notices / 'go-runtime').mkdir()
+(notices / 'go-runtime' / 'LICENSE').write_bytes((goroot / 'LICENSE').read_bytes())
 archive_name = f'sst-forum-{version}-{target_os}-{target_arch}.tar.gz'
 archive_path = Path('dist/fork') / archive_name
 # Explicit timestamps, ownership, modes and ordering avoid host filesystem metadata.
