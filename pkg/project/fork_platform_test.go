@@ -108,7 +108,7 @@ func TestGeneratedPlatformInstall(t *testing.T) {
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatal("fixture directory must not exist")
 	}
-	p := &Project{root: dir, app: &App{Providers: map[string]interface{}{}}}
+	p := &Project{root: dir, config: filepath.Join(dir, "sst.config.ts"), app: &App{Providers: map[string]interface{}{}}}
 	if err := p.CopyPlatform("4.17.2-forum.validation"); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestGeneratedPlatformInstall(t *testing.T) {
 	if bun := os.Getenv("SST_TEST_BUN"); bun != "" {
 		flag.SST_BUN_PATH = bun
 	}
-	if err := p.fetchDeps(); err != nil {
+	if err := p.Install(); err != nil {
 		t.Fatal(err)
 	}
 	if p.NeedsInstall() {
@@ -154,7 +154,7 @@ func TestGeneratedPlatformInstall(t *testing.T) {
 	if err := os.WriteFile(manifestPath, original, 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.fetchDeps(); err != nil {
+	if err := p.Install(); err != nil {
 		t.Fatal("reviewed manifest must install again", err)
 	}
 	t.Log("generated platform:", p.PathPlatformDir())
@@ -168,6 +168,64 @@ func TestUnreviewedProviderRejected(t *testing.T) {
 	p.lock = ProviderLock{{Name: "aws", Package: "@pulumi/aws", Version: "7.21.0", Alias: "aws"}}
 	if err := p.writePackageJson(); err == nil || !strings.Contains(err.Error(), "reviewed runtime lock") {
 		t.Fatal("unreviewed provider version must fail closed", err)
+	}
+}
+
+func TestInstallReceiptRequiresGeneratedMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell package manager fixture")
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node required for patch fixture")
+	}
+	for _, failure := range []string{"config.d.ts", "../provider-lock.json"} {
+		t.Run(failure, func(t *testing.T) {
+			root := t.TempDir()
+			p := &Project{root: root, config: filepath.Join(root, "sst.config.ts"), app: &App{Providers: map[string]interface{}{}}}
+			if err := p.CopyPlatform("4.17.2-forum.test"); err != nil {
+				t.Fatal(err)
+			}
+			sdk := filepath.Join(p.PathPlatformDir(), "node_modules", "@pulumi", "pulumi")
+			if err := os.MkdirAll(sdk, 0755); err != nil {
+				t.Fatal(err)
+			}
+			for name, body := range map[string]string{
+				filepath.Join(sdk, "package.json"):                  `{"version":"` + strings.TrimPrefix(global.PULUMI_VERSION, "v") + `"}`,
+				filepath.Join(p.PathPlatformDir(), ".fork-install"): global.PULUMI_VERSION,
+				// This test isolates metadata failures after successful dependency/patch work.
+				filepath.Join(p.PathPlatformDir(), "scripts", "patch-pulumi-tracing.cjs"): "process.exit(0);",
+			} {
+				if err := os.WriteFile(name, []byte(body), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			bun := filepath.Join(root, "bun")
+			if err := os.WriteFile(bun, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo "+global.BUN_VERSION+"; fi\nexit 0\n"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			oldBun := flag.SST_BUN_PATH
+			t.Cleanup(func() { flag.SST_BUN_PATH = oldBun })
+			flag.SST_BUN_PATH = bun
+			blockedPath := filepath.Join(p.PathPlatformDir(), failure)
+			if err := os.Mkdir(blockedPath, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := p.Install(); err == nil {
+				t.Fatal("metadata write failure was ignored")
+			}
+			if !p.NeedsInstall() {
+				t.Fatal("incomplete metadata retained an installation receipt")
+			}
+			if err := os.Remove(blockedPath); err != nil {
+				t.Fatal(err)
+			}
+			if err := p.Install(); err != nil {
+				t.Fatal("retry after metadata failure", err)
+			}
+			if p.NeedsInstall() {
+				t.Fatal("complete installation did not write its receipt")
+			}
+		})
 	}
 }
 

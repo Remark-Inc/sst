@@ -73,6 +73,10 @@ func (p *Project) NeedsInstall() bool {
 
 func (p *Project) Install() error {
 	slog.Info("installing deps")
+	// A receipt covers the entire installation, including generated metadata.
+	if err := p.invalidateInstall(); err != nil {
+		return err
+	}
 
 	err := p.generateProviderLock()
 	if err != nil {
@@ -99,6 +103,10 @@ func (p *Project) Install() error {
 		return err
 	}
 
+	if err := os.WriteFile(filepath.Join(p.PathPlatformDir(), ".fork-install"), []byte(global.PULUMI_VERSION), 0644); err != nil {
+		_ = p.invalidateInstall()
+		return err
+	}
 	return nil
 }
 
@@ -165,11 +173,7 @@ func (p *Project) writePackageJson() error {
 func (p *Project) writeTypes() error {
 	slog.Info("writing types")
 	typesPath := filepath.Join(p.PathPlatformDir(), "config.d.ts")
-	file, err := os.OpenFile(typesPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+	var file strings.Builder
 
 	file.WriteString(`import "./src/global.d.ts"` + "\n")
 	file.WriteString(`import "../types.generated"` + "\n")
@@ -204,20 +208,26 @@ func (p *Project) writeTypes() error {
 	file.WriteString(`  ) => Config;` + "\n")
 	file.WriteString(`}` + "\n")
 
+	return os.WriteFile(typesPath, []byte(file.String()), 0644)
+}
+
+func (p *Project) invalidateInstall() error {
+	if err := os.Remove(filepath.Join(p.PathPlatformDir(), ".fork-install")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	return nil
 }
 
 func (p *Project) fetchDeps() error {
 	slog.Info("fetching deps")
+	if err := p.invalidateInstall(); err != nil {
+		return err
+	}
 	if flag.SST_NO_BUN {
 		return fmt.Errorf("Forum SST requires Bun %s and its embedded lockfile; unset NO_BUN/SST_NO_BUN", global.BUN_VERSION)
 	}
 	if flag.SST_BUN_VERSION != "" && flag.SST_BUN_VERSION != global.BUN_VERSION {
 		return fmt.Errorf("Forum SST requires Bun %s; unset SST_BUN_VERSION", global.BUN_VERSION)
-	}
-	marker := filepath.Join(p.PathPlatformDir(), ".fork-install")
-	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
-		return err
 	}
 	manager := global.BunPath()
 	versionCommand := process.Command(manager, "--version")
@@ -245,7 +255,7 @@ func (p *Project) fetchDeps() error {
 	if output, err := patch.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to apply fork Pulumi tracing patch: %w\n%s", err, output)
 	}
-	return os.WriteFile(filepath.Join(p.PathPlatformDir(), ".fork-install"), []byte(global.PULUMI_VERSION), 0644)
+	return nil
 }
 
 type ProviderLockEntry struct {
