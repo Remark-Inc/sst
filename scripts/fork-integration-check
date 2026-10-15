@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Local backend preview and mocks only; no provider/cloud resources.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if [ "$#" -ne 1 ]; then echo 'Usage: scripts/fork-integration-check /absolute/fresh/evidence-directory' >&2; exit 1; fi
+case "$1" in /*) ;; *) echo 'Evidence directory must be absolute' >&2; exit 1;; esac
+mkdir "$1"
+evidence_dir=$1
+python3 - "$evidence_dir" <<'PY'
+import hashlib, pathlib, platform, shutil, sys, tarfile, urllib.request
+out = pathlib.Path(sys.argv[1])
+os_name = {'Darwin': 'darwin', 'Linux': 'linux'}[platform.system()]
+arch = {'aarch64': 'arm64', 'arm64': 'arm64', 'x86_64': 'x64', 'AMD64': 'x64'}[platform.machine()]
+filename = f'pulumi-v3.267.0-{os_name}-{arch}.tar.gz'
+checksums = dict(line.split()[::-1] for line in pathlib.Path('pkg/global/pulumi-checksums.txt').read_text().splitlines())
+archive = out / filename
+with urllib.request.urlopen(f'https://get.pulumi.com/releases/sdk/{filename}') as source, archive.open('wb') as dest:
+    shutil.copyfileobj(source, dest)
+assert hashlib.sha256(archive.read_bytes()).hexdigest() == checksums[filename], 'Pulumi checksum mismatch'
+with tarfile.open(archive) as tar:
+    # Python 3.9+ compatibility with explicit path/link checks before extraction.
+    for entry in tar.getmembers():
+        path = pathlib.PurePosixPath(entry.name)
+        assert not path.is_absolute() and '..' not in path.parts, entry.name
+        assert entry.isfile() or entry.isdir(), f'Unexpected archive member {entry.name}'
+    tar.extractall(out)
+print(f'Verified {filename}: {checksums[filename]}')
+PY
+SST_TEST_GENERATED_PLATFORM="$evidence_dir/generated-platform" SST_TEST_BUN="$(command -v bun)" \
+  go test ./pkg/project -run '^TestGeneratedPlatformInstall$' -count=1 -v | tee "$evidence_dir/generated-install.log"
+SST_TEST_PULUMI="$evidence_dir/pulumi/pulumi" SST_TEST_PLATFORM="$evidence_dir/generated-platform/.sst/platform" \
+  go test ./pkg/global -run '^TestPulumiConflictingLanguageHost$' -count=1 -v | tee "$evidence_dir/host-selection.log"
+SST_FORK_PLATFORM_DIR="$evidence_dir/generated-platform/.sst/platform" \
+  node --test scripts/fork-platform-tests.cjs | tee "$evidence_dir/platform-tests.log"

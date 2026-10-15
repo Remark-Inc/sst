@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Exercise the actual packaged executable without dependency downloads or cloud.
+set -euo pipefail
+if [ "$#" -ne 1 ]; then echo 'Usage: scripts/fork-artifact-check /absolute/archive.tar.gz' >&2; exit 1; fi
+archive=$1
+case "$archive" in /*) ;; *) echo 'Archive path must be absolute' >&2; exit 1;; esac
+root=$(mktemp -d "${TMPDIR:-/tmp}/sst-forum-artifact.XXXXXX")
+trap 'rm -rf "$root"' EXIT
+mkdir "$root/extracted" "$root/app"
+tar -xzf "$archive" -C "$root/extracted"
+version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/extracted/manifest.json")
+"$root/extracted/install" "$root/installed"
+mkdir -p "$root/app/node_modules/.bin"
+cat > "$root/app/node_modules/.bin/sst" <<'TRAP'
+#!/bin/sh
+echo 'ERROR: forwarded to the upstream npm CLI' >&2
+exit 42
+TRAP
+chmod +x "$root/app/node_modules/.bin/sst"
+cd "$root/app"
+export SST_SKIP_DEPENDENCY_CHECK=true SST_TELEMETRY_DISABLED=true
+unset SST_SKIP_LOCAL
+# The binary itself must stay on the fork even without the wrapper's env guard.
+[ "$("$root/installed/sst" version)" = "sst $version" ]
+[ "$("$root/installed/sst-forum" version)" = "sst $version" ]
+if "$root/installed/sst" upgrade > "$root/upgrade.log" 2>&1; then
+  echo 'Fork unexpectedly allowed self-upgrade' >&2; exit 1
+fi
+grep -q 'immutable reviewed artifacts' "$root/upgrade.log"
+if "$root/extracted/install" "$root/installed" > "$root/reinstall.log" 2>&1; then
+  echo 'Fork overwrote an existing installation' >&2; exit 1
+fi
+cmp "$root/extracted/sst" "$root/installed/sst"
+test -s "$root/installed/LICENSE"
+printf 'Actual archive passed: %s; no npm forwarding, self-upgrade or overwrite\n' "$version"

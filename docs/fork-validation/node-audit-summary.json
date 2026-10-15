@@ -1,0 +1,14 @@
+{
+  "platform": "Go-generated .sst/platform",
+  "output": "docs/fork-validation",
+  "tests": {
+    "status": 0
+  },
+  "audit": {
+    "status": 0
+  },
+  "auditAdvisoryRecordsBySeverity": {},
+  "auditPackageGroups": [],
+  "uniqueAdvisoryURLs": [],
+  "observedAt": "2026-10-15"
+}

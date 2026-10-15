@@ -30,6 +30,19 @@ func (err *ErrProviderVersionTooLow) Error() string {
 }
 
 func (p *Project) NeedsInstall() bool {
+	// Only a completed install with the embedded tracing patch is reusable.
+	if data, err := os.ReadFile(filepath.Join(p.PathPlatformDir(), ".fork-install")); err != nil || string(data) != global.PULUMI_VERSION {
+		return true
+	}
+	// Provider locks alone do not detect a stale/missing core SDK after an
+	// interrupted installation or SDK-only fork update.
+	data, err := os.ReadFile(filepath.Join(p.PathPlatformDir(), "node_modules", "@pulumi", "pulumi", "package.json"))
+	var sdk struct {
+		Version string `json:"version"`
+	}
+	if err != nil || json.Unmarshal(data, &sdk) != nil || sdk.Version != strings.TrimPrefix(global.PULUMI_VERSION, "v") {
+		return true
+	}
 	if _, err := os.Stat(filepath.Join(p.PathPlatformDir(), "node_modules")); err != nil {
 		return true
 	}
@@ -39,7 +52,7 @@ func (p *Project) NeedsInstall() bool {
 	for _, entry := range p.lock {
 		match, ok := p.app.Providers[entry.Name]
 		if !ok {
-			return false
+			return true
 		}
 		config := match.(map[string]interface{})
 		pkg := config["package"]
@@ -110,11 +123,22 @@ func (p *Project) writePackageJson() error {
 	}
 
 	dependencies := result["dependencies"].(map[string]interface{})
+	// The embedded TypeScript is consumed by app editors/typecheckers, so retain
+	// declaration packages. Repository test runners and their servers are not
+	// required to evaluate an app and must not ship in generated installations.
+	if dev, ok := result["devDependencies"].(map[string]interface{}); ok {
+		for name, version := range dev {
+			if strings.HasPrefix(name, "@types/") {
+				dependencies[name] = version
+			}
+		}
+	}
+	delete(result, "devDependencies")
 	for _, entry := range p.lock {
 		slog.Info("adding dependency", "name", entry.Name)
 		dependencies[entry.Package] = entry.Version
 	}
-	dependencies["@pulumi/pulumi"] = global.PULUMI_VERSION
+	dependencies["@pulumi/pulumi"] = strings.TrimPrefix(global.PULUMI_VERSION, "v")
 
 	dataToWrite, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
@@ -182,9 +206,21 @@ func (p *Project) writeTypes() error {
 
 func (p *Project) fetchDeps() error {
 	slog.Info("fetching deps")
-	manager := global.BunPath()
 	if flag.SST_NO_BUN {
-		manager = "npm"
+		return fmt.Errorf("Forum SST requires Bun %s and its embedded lockfile; unset NO_BUN/SST_NO_BUN", global.BUN_VERSION)
+	}
+	if flag.SST_BUN_VERSION != "" && flag.SST_BUN_VERSION != global.BUN_VERSION {
+		return fmt.Errorf("Forum SST requires Bun %s; unset SST_BUN_VERSION", global.BUN_VERSION)
+	}
+	marker := filepath.Join(p.PathPlatformDir(), ".fork-install")
+	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	manager := global.BunPath()
+	versionCommand := process.Command(manager, "--version")
+	version, err := versionCommand.Output()
+	if err != nil || strings.TrimSpace(string(version)) != global.BUN_VERSION {
+		return fmt.Errorf("Forum SST requires Bun %s at %s (version check returned %q): %v", global.BUN_VERSION, manager, strings.TrimSpace(string(version)), err)
 	}
 	cmd := process.Command(manager, "install")
 	cmd.Dir = p.PathPlatformDir()
@@ -192,7 +228,14 @@ func (p *Project) fetchDeps() error {
 	if err != nil {
 		return fmt.Errorf("failed to run %s install: %w\n%s", manager, err, output)
 	}
-	return nil
+	// Package-manager configuration can disable lifecycle scripts. Apply the
+	// embedded, version-checked patch explicitly as well; it is idempotent.
+	patch := process.Command("node", filepath.Join(p.PathPlatformDir(), "scripts", "patch-pulumi-tracing.cjs"))
+	patch.Dir = p.PathPlatformDir()
+	if output, err := patch.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to apply fork Pulumi tracing patch: %w\n%s", err, output)
+	}
+	return os.WriteFile(filepath.Join(p.PathPlatformDir(), ".fork-install"), []byte(global.PULUMI_VERSION), 0644)
 }
 
 type ProviderLockEntry struct {

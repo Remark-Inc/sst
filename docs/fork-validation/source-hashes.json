@@ -1,0 +1,9 @@
+{
+  "go.mod": "336f9e633cdac58936d54102ceaf645818ec4008c41fcdd309dfb15f0cd057bd",
+  "go.sum": "dfdc47375d6ac96f923ed456b7595dff610892bd328921ea485991325282e86a",
+  "bun.lockb": "18638905c87cca56bf8f50ddc7044b4dc95b534dbd8b1546092345548c0f1be9",
+  "platform/package.json": "a89bf98cd8cc7edac1b352f16b136b1afd7c80a2ffebc3b49be2eee52ea2a319",
+  "platform/bun.lockb": "734cb1297c31b00058e4985593f9c3363c45b3f38430b9177012a011f8568172",
+  "platform/scripts/patch-pulumi-tracing.cjs": "6f9fb23a46ce797eb9d305f63c8b942f596524c1609a0209657bc76175678b19",
+  "pkg/global/pulumi-checksums.txt": "60d8c1fb936df1f3ea3a8b82fe588247abf2503c4ea3c63495a1c2011c771f66"
+}

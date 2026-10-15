@@ -13,7 +13,7 @@ import (
 )
 
 //go:generate ../scripts/build
-//go:embed dist/* src/* functions/* package.json tsconfig.json bun.lockb
+//go:embed dist/* src/* functions/* package.json tsconfig.json bun.lockb scripts/patch-pulumi-tracing.cjs
 var files embed.FS
 
 //go:embed templates/*

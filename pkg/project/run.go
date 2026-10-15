@@ -35,6 +35,12 @@ import (
 func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	log := slog.Default().With("service", "project.run")
 	log.Info("running stack command", "cmd", input.Command)
+	// Fail before acquiring a state lock or creating a stack if the distribution
+	// is incomplete or an override selects a different engine/host version.
+	pulumiPath := global.PulumiPath()
+	if err := global.ValidatePulumi(pulumiPath); err != nil {
+		return util.NewReadableError(err, err.Error())
+	}
 
 	if p.app.Protect && input.Command == "remove" {
 		return ErrProtectedStage
@@ -102,11 +108,11 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 			if input.Command != "deploy" && input.Command != "diff" {
 				return ErrStageNotFound
 			}
-			cmd := process.Command(global.PulumiPath(), "stack", "init", "organization/"+p.app.Name+"/"+p.app.Stage)
+			cmd := process.Command(pulumiPath, "stack", "init", "organization/"+p.app.Name+"/"+p.app.Stage)
 			cmd.Stdout = pulumiStdout
 			cmd.Stderr = pulumiStderr
 			cmd.Dir = workdir.path
-			cmd.Env = os.Environ()
+			cmd.Env = global.PulumiEnv(os.Environ())
 			cmd.Env = append(cmd.Env,
 				"PULUMI_BACKEND_URL="+filepath.ToSlash("file://"+workdir.Backend()),
 				"PULUMI_CONFIG_PASSPHRASE="+passphrase,
@@ -274,10 +280,6 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	if input.ServerPort != 0 {
 		env = append(env, "SST_SERVER=http://127.0.0.1:"+fmt.Sprint(input.ServerPort))
 	}
-	pulumiPath := global.PulumiPath()
-	if flag.SST_PULUMI_PATH != "" {
-		pulumiPath = flag.SST_PULUMI_PATH
-	}
 
 	eventlogPath := workdir.EventLogPath()
 	eventlog, err := os.OpenFile(eventlogPath, os.O_RDWR|os.O_CREATE, 0644)
@@ -377,7 +379,7 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 
 	cmd := process.Command(pulumiPath, args...)
 	process.Detach(cmd)
-	cmd.Env = env
+	cmd.Env = global.PulumiEnv(env)
 	cmd.Stdout = pulumiStdout
 	cmd.Stderr = pulumiStderr
 	cmd.Dir = workdir.Backend()

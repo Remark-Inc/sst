@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -44,23 +43,8 @@ func getAliasName(entry *project.ProviderLockEntry) string {
 }
 
 func main() {
-	// check if node_modules/.bin/sst exists
-	nodeModulesBinPath := filepath.Join("node_modules", ".bin", "sst")
-	binary, _ := os.Executable()
-	if _, err := os.Stat(nodeModulesBinPath); err == nil && !strings.Contains(binary, "node_modules") && os.Getenv("SST_SKIP_LOCAL") != "true" && version != "dev" {
-		// forward command to node_modules/.bin/sst
-		fmt.Fprintln(os.Stderr, ui.TEXT_WARNING_BOLD.Render("Warning: ")+"You are using a global installation of SST but you also have a local installation specified in your package.json. The local installation will be used but you should typically run it through your package manager.")
-		cmd := process.Command(nodeModulesBinPath, os.Args[1:]...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "SST_SKIP_LOCAL=true")
-		if err := cmd.Run(); err != nil {
-			os.Exit(1)
-		}
-		return
-	}
+	// This fork must run its own CLI and embedded platform even when the app
+	// retains the official SST runtime SDK in node_modules.
 	telemetry.SetVersion(version)
 	defer telemetry.Close()
 	defer process.Cleanup()
