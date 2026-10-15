@@ -17,18 +17,18 @@ with tempfile.TemporaryDirectory(prefix='sst forum installer ') as temp:
     (archive / 'sst').chmod(0o755)
     (archive / 'LICENSE').write_text('preserved license\n')
     manifest = archive / 'manifest.json'
-    manifest.write_text(json.dumps({'version': '4.17.2-forum.first', 'distributable': True}))
+    manifest.write_text(json.dumps({'version': '4.17.2+forum.first', 'distributable': True}))
     first = root / 'installs' / 'first version'
     subprocess.run([str(archive / 'install'), str(first)], check=True)
     result = subprocess.check_output([str(first / 'sst-forum'), 'version'], text=True)
     assert result == 'true:version\n', result
     assert (first / 'LICENSE').read_text() == 'preserved license\n'
     assert subprocess.run([str(archive / 'install'), str(first)], capture_output=True).returncode != 0
-    manifest.write_text(json.dumps({'version': '4.17.2-forum.second', 'distributable': True}))
+    manifest.write_text(json.dumps({'version': '4.17.2+forum.second', 'distributable': True}))
     second = root / 'installs' / 'second version'
     subprocess.run([str(archive / 'install'), str(second)], check=True)
-    assert json.loads((first / 'manifest.json').read_text())['version'] == '4.17.2-forum.first'
-    assert json.loads((second / 'manifest.json').read_text())['version'] == '4.17.2-forum.second'
+    assert json.loads((first / 'manifest.json').read_text())['version'] == '4.17.2+forum.first'
+    assert json.loads((second / 'manifest.json').read_text())['version'] == '4.17.2+forum.second'
     # Inject filesystem failures in the installer's Python subprocess. Neither a
     # partial copy nor a failed wrapper write may reserve an immutable version.
     hooks = root / 'fault hooks'
@@ -63,7 +63,7 @@ pathlib.Path.write_text = write
     empty.mkdir()
     assert subprocess.run([str(archive / 'install'), str(empty)], capture_output=True).returncode != 0
     assert list(empty.iterdir()) == []
-    manifest.write_text(json.dumps({'version': '4.17.2-forum.first-dirty', 'distributable': False}))
+    manifest.write_text(json.dumps({'version': '4.17.2+forum.first-dirty', 'distributable': False}))
     dirty = root / 'installs' / 'dirty'
     assert subprocess.run([str(archive / 'install'), str(dirty)], capture_output=True).returncode != 0
     assert not dirty.exists()

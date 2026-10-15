@@ -61,9 +61,11 @@ Linux amd64/arm64 and macOS amd64/arm64; CI validates native Linux amd64 and mac
 arm64. Set `GOOS`/`GOARCH` to cross-compile, but execute regression tests natively
 before approving an additional target. A build is never a deployment approval.
 
-Outputs in `dist/fork/` include `sst-forum-4.17.2-forum.<full-commit>-<os>-<arch>.tar.gz`,
+Outputs in `dist/fork/` include `sst-forum-4.17.2+forum.<full-commit>-<os>-<arch>.tar.gz`,
 `manifest.json` and `checksums.txt`. The archive contains the actual CLI, embedded
 platform, dependency lockfiles, original MIT license and third-party notices.
+Fork identity uses SemVer build metadata, so base-version constraints such as
+`app.version: "4.17.2"` and `">= 4.17.2"` accept it without opting into prereleases.
 The archive fixes timestamps, ordering, modes and ownership; CI builds twice and
 compares checksums on each OS. Record compiler, OS/architecture, manifest and
 checksums with the review. Equal cross-OS/cross-architecture bytes are not expected.
@@ -77,8 +79,8 @@ extracting (`shasum -a 256 -c checksums.txt` on macOS, `sha256sum -c checksums.t
 Linux). Extract to an empty directory and run its included installer:
 
 ```sh
-./install /absolute/path/tools/sst-forum/4.17.2-forum.FULL_COMMIT
-/absolute/path/tools/sst-forum/4.17.2-forum.FULL_COMMIT/sst-forum version
+./install /absolute/path/tools/sst-forum/4.17.2+forum.FULL_COMMIT
+/absolute/path/tools/sst-forum/4.17.2+forum.FULL_COMMIT/sst-forum version
 ```
 
 The installer refuses an existing destination; upgrades install side by side.

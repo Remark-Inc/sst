@@ -11,7 +11,7 @@ for tool in go bun node python3; do command -v "$tool" >/dev/null || { echo "Mis
 [ "$(bun --version)" = "$FORK_BUN_VERSION" ] || { echo "Require Bun $FORK_BUN_VERSION" >&2; exit 1; }
 [ "$(node --version)" = "v$FORK_NODE_VERSION" ] || { echo "Require Node $FORK_NODE_VERSION" >&2; exit 1; }
 commit=$(git rev-parse HEAD)
-version="$FORK_BASE_VERSION-forum.$commit"
+version="$FORK_BASE_VERSION+forum.$commit"
 # Scratch evidence is excluded; all source inputs must be committed.
 if [ -n "$(git status --porcelain --untracked-files=all -- . ':!work')" ]; then
   if [ "$allow_dirty" != true ]; then echo 'Commit tracked changes before building distributable artifacts.' >&2; exit 1; fi

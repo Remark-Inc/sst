@@ -9,13 +9,48 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/sst/sst/v3/pkg/flag"
 	"github.com/sst/sst/v3/pkg/global"
 )
 
+func TestForkArtifactVersionConstraints(t *testing.T) {
+	manifestPath := os.Getenv("SST_TEST_FORK_MANIFEST")
+	if manifestPath == "" {
+		t.Skip("set SST_TEST_FORK_MANIFEST to the built archive manifest")
+	}
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct{ Version, Commit string }
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	version, err := semver.NewVersion(manifest.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version.Prerelease() != "" || version.Metadata() != "forum."+manifest.Commit || len(manifest.Commit) != 40 {
+		t.Fatalf("artifact must preserve stable base semantics and full commit identity: %s", manifest.Version)
+	}
+	for constraint, want := range map[string]bool{
+		"4.17.2": true, ">= 4.17.2": true, "^4.17.2": true,
+		"4.16.0": false, ">= 4.18.0": false,
+	} {
+		parsed, err := semver.NewConstraint(constraint)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if parsed.Check(version) != want {
+			t.Errorf("artifact %s constraint %s: want %t", manifest.Version, constraint, want)
+		}
+	}
+}
+
 func TestForkPlatformUpgradeAndReinstall(t *testing.T) {
 	p := &Project{root: t.TempDir(), app: &App{Providers: map[string]interface{}{}}}
-	if err := p.CopyPlatform("4.17.2-forum.old"); err != nil {
+	if err := p.CopyPlatform("4.17.2+forum.old"); err != nil {
 		t.Fatal(err)
 	}
 	sdkDir := filepath.Join(p.PathPlatformDir(), "node_modules", "@pulumi", "pulumi")
@@ -31,13 +66,13 @@ func TestForkPlatformUpgradeAndReinstall(t *testing.T) {
 	if !p.NeedsInstall() {
 		t.Fatal("stale SDK did not trigger installation")
 	}
-	if p.CheckPlatform("4.17.2-forum.new") {
+	if p.CheckPlatform("4.17.2+forum.new") {
 		t.Fatal("new artifact reused old embedded platform")
 	}
-	if err := p.CopyPlatform("4.17.2-forum.new"); err != nil {
+	if err := p.CopyPlatform("4.17.2+forum.new"); err != nil {
 		t.Fatal(err)
 	}
-	if !p.CheckPlatform("4.17.2-forum.new") || !p.NeedsInstall() {
+	if !p.CheckPlatform("4.17.2+forum.new") || !p.NeedsInstall() {
 		t.Fatal("upgrade must replace platform and require dependency installation")
 	}
 	p.lock = ProviderLock{{Name: "aws", Package: "@pulumi/aws", Version: "7.20.0", Alias: "aws"}}
@@ -109,7 +144,7 @@ func TestGeneratedPlatformInstall(t *testing.T) {
 		t.Fatal("fixture directory must not exist")
 	}
 	p := &Project{root: dir, config: filepath.Join(dir, "sst.config.ts"), app: &App{Providers: map[string]interface{}{}}}
-	if err := p.CopyPlatform("4.17.2-forum.validation"); err != nil {
+	if err := p.CopyPlatform("4.17.2+forum.validation"); err != nil {
 		t.Fatal(err)
 	}
 	if err := p.writePackageJson(); err != nil {
@@ -162,7 +197,7 @@ func TestGeneratedPlatformInstall(t *testing.T) {
 
 func TestUnreviewedProviderRejected(t *testing.T) {
 	p := &Project{root: t.TempDir(), app: &App{Providers: map[string]interface{}{}}}
-	if err := p.CopyPlatform("4.17.2-forum.test"); err != nil {
+	if err := p.CopyPlatform("4.17.2+forum.test"); err != nil {
 		t.Fatal(err)
 	}
 	p.lock = ProviderLock{{Name: "aws", Package: "@pulumi/aws", Version: "7.21.0", Alias: "aws"}}
@@ -182,7 +217,7 @@ func TestInstallReceiptRequiresGeneratedMetadata(t *testing.T) {
 		t.Run(failure, func(t *testing.T) {
 			root := t.TempDir()
 			p := &Project{root: root, config: filepath.Join(root, "sst.config.ts"), app: &App{Providers: map[string]interface{}{}}}
-			if err := p.CopyPlatform("4.17.2-forum.test"); err != nil {
+			if err := p.CopyPlatform("4.17.2+forum.test"); err != nil {
 				t.Fatal(err)
 			}
 			sdk := filepath.Join(p.PathPlatformDir(), "node_modules", "@pulumi", "pulumi")
@@ -239,7 +274,7 @@ func TestFailedForkReinstallInvalidatesReceipt(t *testing.T) {
 	for _, failure := range []string{"package manager", "tracing patch"} {
 		t.Run(failure, func(t *testing.T) {
 			p := &Project{root: t.TempDir(), app: &App{Providers: map[string]interface{}{}}}
-			if err := p.CopyPlatform("4.17.2-forum.test"); err != nil {
+			if err := p.CopyPlatform("4.17.2+forum.test"); err != nil {
 				t.Fatal(err)
 			}
 			sdk := filepath.Join(p.PathPlatformDir(), "node_modules", "@pulumi", "pulumi")
