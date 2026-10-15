@@ -19,7 +19,18 @@ if [ -n "$(git status --porcelain --untracked-files=all -- . ':!work')" ]; then
 fi
 export CGO_ENABLED=0 GOTOOLCHAIN=local SST_SKIP_BRIDGE_IMAGE=true
 bun install --frozen-lockfile
-(cd platform && bun install --frozen-lockfile)
+# A cd into platform still belongs to the root Bun workspace. Validate the
+# separate embedded lock outside that workspace, including its install patch.
+(
+  standalone=$(mktemp -d "${TMPDIR:-/tmp}/sst-forum-platform.XXXXXX")
+  trap 'rm -rf "$standalone"' EXIT
+  cp platform/package.json platform/bun.lockb "$standalone/"
+  mkdir "$standalone/scripts"
+  cp platform/scripts/patch-pulumi-tracing.cjs "$standalone/scripts/"
+  cd "$standalone"
+  bun install --frozen-lockfile
+  bun audit --json
+)
 # Remove ignored generated output so stale embedded files cannot survive rebuilds.
 rm -rf platform/dist
 ./platform/scripts/build
