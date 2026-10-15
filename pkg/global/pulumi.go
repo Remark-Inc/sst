@@ -19,7 +19,6 @@ import (
 
 	"github.com/sst/sst/v3/pkg/flag"
 	"github.com/sst/sst/v3/pkg/process"
-	"github.com/sst/sst/v3/pkg/task"
 )
 
 // Pulumi checksums are reviewed with the coordinated SDK/engine update.
@@ -134,7 +133,9 @@ func InstallPulumi(ctx context.Context) error {
 		fileExtension = ".zip"
 	}
 
-	_, err := task.Run(ctx, func() (any, error) {
+	// Keep filesystem work synchronous: cancellation must not release the lock
+	// while extraction, validation or promotion is still running.
+	install := func() error {
 		filename := fmt.Sprintf("pulumi-%s-%s%s", PULUMI_VERSION, osArch, fileExtension)
 		checksum := ""
 		for _, line := range strings.Split(pulumiChecksums, "\n") {
@@ -144,32 +145,32 @@ func InstallPulumi(ctx context.Context) error {
 			}
 		}
 		if checksum == "" {
-			return nil, fmt.Errorf("missing reviewed checksum for %s", filename)
+			return fmt.Errorf("missing reviewed checksum for %s", filename)
 		}
 		url := fmt.Sprintf("https://github.com/pulumi/pulumi/releases/download/%s/%s", PULUMI_VERSION, filename)
 		slog.Info("pulumi downloading", "url", url)
 
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		resp, err := http.DefaultClient.Do(request)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to download pulumi: HTTP status %d", resp.StatusCode)
+			return fmt.Errorf("failed to download pulumi: HTTP status %d", resp.StatusCode)
 		}
 
 		target := filepath.Dir(PulumiPath())
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return nil, err
+			return err
 		}
 		tmp, err := os.MkdirTemp(filepath.Dir(target), ".install-")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		cleanupStaging := true
 		defer func() {
@@ -179,43 +180,43 @@ func InstallPulumi(ctx context.Context) error {
 		}()
 		archive, err := os.CreateTemp(filepath.Dir(target), ".archive-")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer os.Remove(archive.Name())
 		defer archive.Close()
 		hash := sha256.New()
 		if _, err := io.Copy(io.MultiWriter(archive, hash), resp.Body); err != nil {
-			return nil, err
+			return err
 		}
 		if fmt.Sprintf("%x", hash.Sum(nil)) != checksum {
-			return nil, fmt.Errorf("checksum mismatch for %s", filename)
+			return fmt.Errorf("checksum mismatch for %s", filename)
 		}
 		if _, err := archive.Seek(0, 0); err != nil {
-			return nil, err
+			return err
 		}
 		switch fileExtension {
 		case ".tar.gz":
 			gzr, err := gzip.NewReader(archive)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			defer gzr.Close()
 			err = untar(gzr, tmp)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 		case ".zip":
 			// Read zip file
 			zipBytes, err := io.ReadAll(archive)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			// Open zip archive
 			zipReader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			// Extract all files to tmp root
@@ -230,40 +231,53 @@ func InstallPulumi(ctx context.Context) error {
 
 				rc, err := file.Open()
 				if err != nil {
-					return nil, err
+					return err
 				}
 
 				outFile, err := os.Create(destPath)
 				if err != nil {
 					rc.Close()
-					return nil, err
+					return err
 				}
 
 				_, err = io.Copy(outFile, rc)
 				rc.Close()
 				outFile.Close()
 				if err != nil {
-					return nil, err
+					return err
 				}
 			}
 
 		default:
-			return nil, fmt.Errorf("unsupported file extension: %s", fileExtension)
+			return fmt.Errorf("unsupported file extension: %s", fileExtension)
 		}
 
 		if err := ValidatePulumi(filepath.Join(tmp, executableName("pulumi"))); err != nil {
-			return nil, err
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		// A previous SDK uses a different directory, so upgrades cannot leave a new
 		// engine beside an old language host. Only replace an invalid same-version install.
 		if err := promotePulumiInstall(tmp, target, os.Rename); err != nil {
 			// Keep the validated replacement available even if rollback also fails.
 			cleanupStaging = false
-			return nil, err
+			return err
 		}
-		return nil, nil
-	})
-	return err
+		return nil
+	}
+	var installErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		installErr = install()
+		if installErr == nil {
+			return nil
+		}
+	}
+	return installErr
 }
 
 // The caller holds the per-version install lock. Keep the previous directory

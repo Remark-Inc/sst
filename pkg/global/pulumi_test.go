@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sst/sst/v3/pkg/flag"
 	"github.com/sst/sst/v3/pkg/process"
@@ -100,6 +101,70 @@ func TestPulumiEnvOverridesConflicts(t *testing.T) {
 type pulumiTransport func(*http.Request) (*http.Response, error)
 
 func (f pulumiTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+type blockedPulumiBody struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockedPulumiBody) Read([]byte) (int, error) {
+	select {
+	case b.entered <- struct{}{}:
+	default:
+	}
+	<-b.release
+	return 0, io.EOF
+}
+
+func (b *blockedPulumiBody) Close() error { return nil }
+
+func TestCanceledPulumiInstallRetainsLockUntilWorkStops(t *testing.T) {
+	oldConfig, oldOverride, oldClient := configDir, flag.SST_PULUMI_PATH, http.DefaultClient
+	t.Cleanup(func() {
+		configDir, flag.SST_PULUMI_PATH, http.DefaultClient = oldConfig, oldOverride, oldClient
+	})
+	configDir, flag.SST_PULUMI_PATH = t.TempDir(), ""
+	body := &blockedPulumiBody{entered: make(chan struct{}, 1), release: make(chan struct{})}
+	http.DefaultClient = &http.Client{Transport: pulumiTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: body, Header: make(http.Header)}, nil
+	})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- InstallPulumi(ctx) }()
+	select {
+	case <-body.entered:
+	case err := <-done:
+		close(body.release)
+		t.Fatal("installer exited before reaching blocked operation", err)
+	case <-time.After(5 * time.Second):
+		close(body.release)
+		cancel()
+		<-done
+		t.Fatal("installer did not reach blocked operation")
+	}
+	cancel()
+	// A second caller waits for the lock, then times out while the first caller
+	// is still blocked. Cancellation of the first must not release it early.
+	secondCtx, secondCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer secondCancel()
+	if err := InstallPulumi(secondCtx); err == nil || !strings.Contains(err.Error(), "install lock") {
+		t.Error("second installer entered before canceled work stopped", err)
+	}
+	if _, err := os.Stat(filepath.Dir(PulumiPath()) + ".lock"); err != nil {
+		t.Error("cancellation released the installation lock early", err)
+	}
+	close(body.release)
+	if err := <-done; err == nil {
+		t.Error("canceled installation succeeded")
+	}
+	if _, err := os.Stat(filepath.Dir(PulumiPath()) + ".lock"); !os.IsNotExist(err) {
+		t.Error("completed work retained installation lock", err)
+	}
+	if _, err := os.Stat(PulumiPath()); !os.IsNotExist(err) {
+		t.Error("canceled installation published an engine", err)
+	}
+}
 
 func TestInstallPulumiVerifiedBundle(t *testing.T) {
 	if runtime.GOOS == "windows" {
