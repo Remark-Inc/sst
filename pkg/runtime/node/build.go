@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -99,7 +100,7 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
-						if r.version != "dev" && pkgjson.Version != r.version {
+						if !sdkVersionMatches(r.version, pkgjson.Version) {
 							return esbuild.OnResolveResult{}, fmt.Errorf("The sst package your application is importing (%v) does not match the sst cli version (%v). Make sure the version of sst in package.json is correct across your entire repo.", pkgjson.Version, r.version)
 						}
 					}
@@ -323,6 +324,19 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		Errors:     errors,
 		Sourcemaps: sourcemaps,
 	}, nil
+}
+
+// Fork build metadata identifies the executable, while applications use the
+// unchanged upstream SDK at the exact base release. Keep all other mismatches
+// (including older SDK patches and prereleases) rejected.
+var forkReleaseVersion = regexp.MustCompile(`^(\d+\.\d+\.\d+)\+forum\.[0-9a-f]{40}$`)
+
+func sdkVersionMatches(cliVersion, sdkVersion string) bool {
+	if cliVersion == "dev" || cliVersion == sdkVersion {
+		return true
+	}
+	match := forkReleaseVersion.FindStringSubmatch(cliVersion)
+	return match != nil && sdkVersion == match[1]
 }
 
 type catalogSource struct {
