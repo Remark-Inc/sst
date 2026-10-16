@@ -1,12 +1,15 @@
 package node
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sst/sst/v3/pkg/js"
+	"github.com/sst/sst/v3/pkg/runtime"
 )
 
 func TestResolveInstallVersion(t *testing.T) {
@@ -253,5 +256,65 @@ func mustWriteFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Exercise the real bundler resolver, not just a version-comparison helper.
+func TestBuildWithForkRuntimeSDK(t *testing.T) {
+	forkVersion := "4.17.2+forum." + strings.Repeat("a", 40)
+	if manifestPath := os.Getenv("SST_TEST_FORK_MANIFEST"); manifestPath != "" {
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var manifest struct{ Version string }
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			t.Fatal(err)
+		}
+		forkVersion = manifest.Version
+	}
+	for _, tc := range []struct {
+		name, cli, sdk string
+		wantOK         bool
+	}{
+		{"fork base SDK", forkVersion, "4.17.2", true},
+		{"fork old SDK", forkVersion, "4.17.0", false},
+		{"fork newer SDK", forkVersion, "4.17.3", false},
+		{"fork prerelease SDK", forkVersion, "4.17.2-beta.1", false},
+		{"upstream exact", "4.17.2", "4.17.2", true},
+		{"upstream mismatch", "4.17.2", "4.17.0", false},
+		{"development", "dev", "4.17.0", true},
+		{"malformed fork", "4.17.2+forum.short", "4.17.2", false},
+		{"unrelated metadata", "4.17.2+other.test", "4.17.2", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			pkgDir := filepath.Join(dir, "node_modules", "sst")
+			mustMkdirAll(t, pkgDir)
+			mustWriteFile(t, filepath.Join(pkgDir, "package.json"), `{"name":"sst","version":"`+tc.sdk+`","type":"module","main":"index.js"}`)
+			mustWriteFile(t, filepath.Join(pkgDir, "index.js"), `export const Resource = { Fixture: { name: "linked-resource" } };`)
+			mustWriteFile(t, filepath.Join(dir, "handler.ts"), `import { Resource } from "sst"; export async function handler() { return Resource.Fixture.name; }`)
+			result, err := New(tc.cli).Build(context.Background(), &runtime.BuildInput{
+				CfgPath: filepath.Join(dir, "sst.config.ts"), FunctionID: "Fixture",
+				Handler: "handler.handler", Runtime: "nodejs24.x",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantOK {
+				if len(result.Errors) != 0 {
+					t.Fatalf("bundle failed: %v", result.Errors)
+				}
+				bundle, err := os.ReadFile(filepath.Join(dir, ".sst", "artifacts", "Fixture-src", "bundle.mjs"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(bundle), "linked-resource") {
+					t.Fatal("SDK was not bundled")
+				}
+			} else if !strings.Contains(strings.Join(result.Errors, "\n"), "does not match the sst cli version") {
+				t.Fatalf("expected version mismatch, got %v", result.Errors)
+			}
+		})
 	}
 }

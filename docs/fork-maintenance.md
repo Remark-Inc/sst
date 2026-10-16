@@ -2,8 +2,11 @@
 
 This is a temporary, narrowly scoped fork for Forum AI. Source: `anomalyco/sst`,
 base **v4.17.2**, commit `e49ac31411f63ab4ed0d802b7e15d95f6b827e47`.
-The application runtime SDK package remains upstream `sst`; invoking its npm CLI
-would bypass this fork. Invoke the versioned fork executable explicitly.
+The application runtime SDK package remains upstream `sst`, pinned to the exact
+base release **4.17.2** in every workspace package. Lambda bundling accepts that
+base SDK with the full-commit fork build metadata; older SDK patches, prereleases,
+and unrelated metadata still fail the version check. Invoking the npm CLI would
+bypass this fork. Invoke the versioned fork executable explicitly.
 
 ## Patch inventory and boundaries
 
