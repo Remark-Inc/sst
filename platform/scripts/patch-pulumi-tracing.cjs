@@ -1,4 +1,4 @@
-// Fork patch for @pulumi/pulumi 3.267.0. Preserve the SDK's original license.
+// Fork patch for @pulumi/pulumi 3.272.0. Preserve the SDK's original license.
 // The SDK passes a carrier with a set() method to propagation.inject(), but the
 // default OpenTelemetry setter assigns object properties instead of calling it.
 // Supply the setter so traceparent reaches gRPC Metadata. Fail closed on updates.
@@ -12,7 +12,7 @@ function patchPulumiTracing(sdkRoot) {
     throw new Error(`The SST fork requires Node.js 22 or newer; found ${process.version}`);
   }
   const version = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8")).version;
-  if (version !== "3.267.0") {
+  if (version !== "3.272.0") {
     throw new Error(`Review the SST fork tracing patch before using Pulumi ${version}`);
   }
   const target = path.join(sdkRoot, "runtime", "settings.js");

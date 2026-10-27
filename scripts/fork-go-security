@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# JSON output alone always exits zero for findings. Convert it to enforce reachability.
+set -euo pipefail
+if [ "$#" -ne 1 ]; then echo 'Usage: scripts/fork-go-security /path/to/evidence-directory' >&2; exit 1; fi
+mkdir -p "$1"
+govulncheck -json ./... > "$1/govulncheck.json"
+govulncheck -mode=convert < "$1/govulncheck.json" | tee "$1/govulncheck.txt"

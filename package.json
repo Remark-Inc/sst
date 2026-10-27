@@ -19,7 +19,7 @@
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.6",
-    "@pulumi/pulumi": "3.267.0",
+    "@pulumi/pulumi": "3.272.0",
     "google-protobuf": "3.21.2"
   }
 }

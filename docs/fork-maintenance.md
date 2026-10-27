@@ -10,7 +10,7 @@ bypass this fork. Invoke the versioned fork executable explicitly.
 
 ## Patch inventory and boundaries
 
-- Coordinate Pulumi Go SDK/pkg, engine and Node SDK at **3.267.0**, including the
+- Coordinate Pulumi Go SDK/pkg, engine and Node SDK at **3.272.0**, including the
   secrets provider context API migration and generated-platform dependency policy.
   Provider package versions are intentionally unchanged. AWS JavaScript clients
   and build/test dependencies receive targeted security updates; retry semantics
@@ -21,7 +21,7 @@ bypass this fork. Invoke the versioned fork executable explicitly.
   with idempotence, malformed-input/control and mocked secret/resource tests.
 - Select the language host deterministically from the matching engine installation;
   test a conflicting executable earlier on `PATH` and reinstall/upgrade behavior.
-- Patch the Pulumi 3.267.0 outgoing gRPC tracing setter with an embedded,
+- Patch the Pulumi 3.272.0 outgoing gRPC tracing setter with an embedded,
   version/source-checked installer; pin a single SDK and compatible grpc-js in the
   generated platform. See [validation evidence](fork-validation/README.md).
 - Build the actual Go CLI with its embedded platform, distinct commit identity,
@@ -37,7 +37,7 @@ AWS deployment/rollback). Their deployment evidence does not validate this fork.
 
 ## Supported builds and artifact identity
 
-`./scripts/fork-toolchain.env` pins Go **1.26.9**, Bun **1.3.6** and Node **26.5.1**.
+`./scripts/fork-toolchain.env` pins Go **1.26.10**, Bun **1.3.6** and Node **26.5.1**.
 Use these exact versions on Linux CI and macOS. Generated installation rejects
 npm fallback (`NO_BUN` / `SST_NO_BUN`) and a Bun executable with another version.
 Node 22 or newer is required by the tracing patch; validated runtime targets are
@@ -125,7 +125,10 @@ Before approval, record commands, tool versions, exact commit and results:
    tracing/OpenTelemetry dependencies, dependency graph and current security scan.
    A root workspace scan alone is insufficient. Document residual findings. The
    CI generated-platform audit and separate pinned `govulncheck` job are failing
-   security gates when findings are present; they never silently waive findings.
+   security gates when findings are present. The Go gate converts its JSON report
+   with `govulncheck -mode=convert`; JSON output alone returns success even with
+   reachable findings. A recorded reachable finding and clean/error controls test
+   the actual converter and shell gate.
    Build/reproducibility artifacts are retained before the JS security gate runs.
 3. Prove trace parent/baggage propagation, malformed baggage rejection and valid
    controls where relevant to the selected tracing implementation. Include secret
@@ -151,7 +154,7 @@ acceptance plan, not a claim of passing evidence:
 | Disposable stack | A reviewed minimal config and test account/stage; create, update, no-change, delete; expected resources/outputs and no leaks. Include secret outputs and trace/baggage controls. |
 | Existing-stack upgrade | Backup/export state and record engine/provider versions; run a no-change preview, upgrade, update and no-change with the fork; compare outputs/resource identities and state compatibility. |
 | Rollback rehearsal | Restore prior versioned executable plus prior generated platform dependencies; preview first, then approved rollback only if state/schema compatibility permits. Demonstrate recovery in disposable state before any shared stack. |
-| Forum staging six-check suite | Run the current `scripts/staging-smoke/run.ts` suite: browser setup; browser navigation and asset smoke; landing form writes and HQ verification; labeling create/browser submit/results/archive (including tree); response-gen one-prompt run; neutrality judge one-response batch. Record each status and evidence. PR 2250 remains open and draft; do not duplicate it or claim it fixed by a workspace scan. |
+| Forum staging six-check suite | Run the current `scripts/staging-smoke/run.ts` suite: browser setup; browser navigation and asset smoke; landing form writes and HQ verification; labeling create/browser submit/results/archive (including tree); response-gen one-prompt run; neutrality judge one-response batch. Record each status and evidence. PR 2250 is merged in Forum; preserve it and validate the separate generated graph. |
 | Memory/performance | Compare peak RSS, deployment duration, process count and no-change duration against the same baseline stack; investigate significant regressions before rollout. |
 | Browser acceptance | Verify HQ, landing, Sanity content, response flow and judge/accounting using the approved staging test accounts and canonical suite. Capture expected outputs without exposing credentials. |
 | Runtime errors | Query the agreed CloudWatch groups/window for new errors, failed invocations, unhandled rejections and tracing/baggage failures. Correlate deployment and test timestamps. |
@@ -184,6 +187,9 @@ in staging/production/smoke. **Retain it.** The conflicting-host regression is a
 prerequisite to proposing removal; actual Forum staging acceptance and a separate
 reviewed Forum change are still required. This task does not modify Forum AI.
 
+See [current upstream assessment](fork-upstream-status.md) for release dates,
+remaining divergence and the security update awaiting immutable publication.
+
 ## Upkeep, conflicts and exit
 
 The existing “Maintain Forum SST fork” weekly heartbeat (Mondays at 09:00
@@ -210,4 +216,4 @@ Exit when an official version includes equivalent fixes and passes the same clea
 install, host conflict, security and staging acceptance gates. Pin that official
 version, review a separate Forum migration, retain rollback artifacts, and archive
 this patch inventory only after the agreed observation window. Do not delete the
-host workaround or claim draft PR 2250 fixed solely because official versions moved.
+host workaround or infer workspace remediation solely because official versions moved.
