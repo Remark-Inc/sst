@@ -31,7 +31,7 @@
     "@pulumi/cloudflare": "6.15.0",
     "@pulumi/command": "1.0.1",
     "@pulumi/docker-build": "0.0.14",
-    "@pulumi/pulumi": "3.267.0",
+    "@pulumi/pulumi": "3.273.0",
     "@pulumi/random": "4.16.6",
     "@pulumi/tls": "5.0.1",
     "@pulumiverse/vercel": "4.6.0",
@@ -61,7 +61,7 @@
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.6",
-    "@pulumi/pulumi": "3.267.0",
+    "@pulumi/pulumi": "3.273.0",
     "string-width": "4.2.3",
     "google-protobuf": "3.21.2"
   }

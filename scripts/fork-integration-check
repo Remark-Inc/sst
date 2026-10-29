@@ -11,7 +11,7 @@ import hashlib, pathlib, platform, shutil, sys, tarfile, urllib.request
 out = pathlib.Path(sys.argv[1])
 os_name = {'Darwin': 'darwin', 'Linux': 'linux'}[platform.system()]
 arch = {'aarch64': 'arm64', 'arm64': 'arm64', 'x86_64': 'x64', 'AMD64': 'x64'}[platform.machine()]
-filename = f'pulumi-v3.267.0-{os_name}-{arch}.tar.gz'
+filename = f'pulumi-v3.273.0-{os_name}-{arch}.tar.gz'
 checksums = dict(line.split()[::-1] for line in pathlib.Path('pkg/global/pulumi-checksums.txt').read_text().splitlines())
 archive = out / filename
 with urllib.request.urlopen(f'https://get.pulumi.com/releases/sdk/{filename}') as source, archive.open('wb') as dest:
