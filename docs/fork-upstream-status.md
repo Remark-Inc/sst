@@ -1,4 +1,4 @@
-# Upstream assessment — October 27, 2026
+# Upstream assessment — October 29, 2026
 
 Official SST stable remains [v4.17.2](https://github.com/anomalyco/sst/releases/tag/v4.17.2),
 published October 8 at 15:14 UTC. Its tag and current `upstream/dev` both resolve to
@@ -12,7 +12,43 @@ Forum integration #2279 still pins the previously published immutable fork
 candidate, not a replacement release. Do not change Forum's checksums until a
 reviewed merged commit has new verified immutable artifacts.
 
-## Narrow security update
+## October 29 refresh
+
+Official SST is unchanged. Pulumi stable 3.273.0, published October 28 at
+19:51:35 UTC, is a justified coordinated security refresh: its actual Linux x64
+and macOS arm64 engine archives contain x/net 0.62.0, fixing GO-2026-6860 and
+GO-2026-6866. It also fixes secret map/array leakage in JSON preview/update
+output ([upstream #25400](https://github.com/pulumi/pulumi/pull/25400)). Synthetic
+controls fail on 3.272.0 and pass on 3.273.0; upstream regression tests pass.
+Engine, Go pkg/SDK, generated Node SDK, locks and checksums move together.
+The tracing setter is still needed; provider package versions remain unchanged.
+
+The release is recent. No configured release-age policy exists in this checkout;
+this focused security candidate does not bypass any age check. Publication and
+live acceptance remain separately gated. The release removes deprecated bare
+`pulumi logs` and `pulumi watch`; the inspected SST command dispatch does not use
+those commands. Read/existence and generated Automation API changes still need
+review in acceptance.
+
+### Corrected engine/OpenPGP evidence
+
+The October 28 description of affected symbols being present was too strong.
+`govulncheck -mode=extract` recovers zero package symbols from the official
+3.272.0 macOS and 3.273.0 macOS/Linux binaries. In govulncheck 1.9.0, that selects
+a documented fallback that synthesizes all known vulnerable symbols from the
+module graph. Binary exit 3 for GO-2026-5932 is not proof of imported OpenPGP.
+Do not suppress, rewrite or describe that raw scan as passed.
+
+The 3.273.0 source revision recorded in the official binary is
+`874c77a73039cf013d6a685a15293843de2b0e01`. Analysis with Go 1.27.3, CGO disabled
+and release tags `osusergo,grpcnotrace` finds no reachable or imported-package
+findings; OpenPGP remains module-only. All 255 dependency versions recorded in
+the macOS binary match the exact source module graph, and its imported package
+list has no OpenPGP. Retain this as evidence for an explicit risk disposition,
+not a release approval or a blanket security claim. See the October 29 validation
+record and PR for Linux confirmation and final committed CI.
+
+## Historical October 27 security update
 
 - Go 1.26.10 fixes [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809), reachable
   from the prior CLI's websocket TLS path. The exact toolchain and module minimum
@@ -63,7 +99,7 @@ is dismissed and no scan is disabled to reduce counts.
 
 ## Next update and approval boundaries
 
-Finish the security-update PR's native Linux/macOS, Node 24, generated install,
+Finish the refreshed security-update PR's native Linux/macOS, Node 24, generated install,
 security, host selection, tracing and reproducibility evidence. Then obtain the
 separate fork merge/publication decision, build the exact merged source, and
 prepare Forum's new pin. Keep #2279 draft until its security hold and live

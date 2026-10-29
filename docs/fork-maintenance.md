@@ -10,7 +10,7 @@ bypass this fork. Invoke the versioned fork executable explicitly.
 
 ## Patch inventory and boundaries
 
-- Coordinate Pulumi Go SDK/pkg, engine and Node SDK at **3.272.0**, including the
+- Coordinate Pulumi Go SDK/pkg, engine and Node SDK at **3.273.0**, including the
   secrets provider context API migration and generated-platform dependency policy.
   Provider package versions are intentionally unchanged. AWS JavaScript clients
   and build/test dependencies receive targeted security updates; retry semantics
@@ -21,7 +21,7 @@ bypass this fork. Invoke the versioned fork executable explicitly.
   with idempotence, malformed-input/control and mocked secret/resource tests.
 - Select the language host deterministically from the matching engine installation;
   test a conflicting executable earlier on `PATH` and reinstall/upgrade behavior.
-- Patch the Pulumi 3.272.0 outgoing gRPC tracing setter with an embedded,
+- Patch the Pulumi 3.273.0 outgoing gRPC tracing setter with an embedded,
   version/source-checked installer; pin a single SDK and compatible grpc-js in the
   generated platform. See [validation evidence](fork-validation/README.md).
 - Build the actual Go CLI with its embedded platform, distinct commit identity,
