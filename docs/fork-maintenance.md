@@ -124,11 +124,12 @@ Before approval, record commands, tool versions, exact commit and results:
    generation path used by SST. Record the exact installed Pulumi SDK and all
    tracing/OpenTelemetry dependencies, dependency graph and current security scan.
    A root workspace scan alone is insufficient. Document residual findings. The
-   CI generated-platform audit and separate pinned `govulncheck` job are failing
-   security gates when findings are present. The Go gate converts its JSON report
-   with `govulncheck -mode=convert`; JSON output alone returns success even with
-   reachable findings. A recorded reachable finding and clean/error controls test
-   the actual converter and shell gate.
+   generated-platform audit fails when its advisory audit fails. The separate
+   pinned Go gate fails on reachable vulnerabilities or scan/conversion errors;
+   imported-package and module-only findings remain evidence and do not alone
+   fail the reachability gate. It converts JSON with `govulncheck -mode=convert`;
+   JSON output alone returns success even with reachable findings. A recorded
+   reachable finding and clean/error controls test the converter and shell gate.
    Build/reproducibility artifacts are retained before the JS security gate runs.
 3. Prove trace parent/baggage propagation, malformed baggage rejection and valid
    controls where relevant to the selected tracing implementation. Include secret
